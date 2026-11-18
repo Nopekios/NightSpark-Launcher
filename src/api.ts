@@ -1,0 +1,258 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+export type GameInstance = {
+  id: string;
+  name: string;
+  version: string;
+  game_dir: string;
+};
+
+export type JavaInfo = {
+  path: string;
+  version: string;
+};
+
+export type Account = {
+  uuid: string;
+  name: string;
+  expiresAt: number | null;
+  hasRefreshToken: boolean;
+};
+
+export type VersionEntry = {
+  id: string;
+  type: string;
+  url: string;
+  releaseTime: string;
+};
+
+export type InstallReport = {
+  version: string;
+  java_major: number;
+  libraries: number;
+  assets: number;
+};
+
+export type InstallProgress = {
+  stage: string;
+  done: number;
+  total: number;
+};
+
+export type LaunchOutcome = {
+  pid: number;
+  log_path: string;
+  summary: string;
+  /** 自动换了 Java 时的说明，没换就没有这个字段。 */
+  java_note?: string | null;
+  /** 启动前自动补的东西（搬整合包文件、补 mod、下版本文件），按顺序展示。 */
+  prepare_notes?: string[];
+};
+
+/** 启动器自己下载安装的 Java 运行时。 */
+export type JavaRuntime = {
+  major: number;
+  path: string;
+  version: string;
+};
+
+export type ImportReport = {
+  instance: GameInstance;
+  kind: string;
+  files: number;
+  /** 整合包要求的加载器写法，如 forge-47.2.0；纯原版包为 null */
+  loader: string | null;
+  warnings: string[];
+};
+
+export type PendingReport = {
+  downloaded: number;
+  skipped: number;
+  failed: number;
+  messages: string[];
+};
+
+/** 加载器装完之后回给前端的结果。 */
+export type LoaderReport = {
+  loader: string;
+  loader_version: string;
+  mc_version: string;
+  /** 装完要用的版本 id，形如 1.20.1-forge-47.2.0 */
+  target_version: string;
+  version_json: string;
+  downloaded: number;
+  skipped: number;
+  messages: string[];
+};
+
+/** 实例文件校验的结果。 */
+export type VerifyReport = {
+  checked: number;
+  ok: number;
+  missing: string[];
+  broken: string[];
+  unverified: string[];
+  /** 实例 mods 目录下的 jar 数 */
+  mods_jars: number;
+  notes: string[];
+};
+
+/** 导入本机版本的结果：搬了哪些文件、补了多少 mod。 */
+export type ImportedInstance = {
+  instance: GameInstance;
+  files: number;
+  mods: number;
+  /** 实例本来就在，这次只是把版本隔离的内容补进去 */
+  reused: boolean;
+};
+
+/** 版本隔离文件搬运统计。 */
+export type CarryReport = {
+  files: number;
+  mods: number;
+  linked: number;
+  copied: number;
+  kept: number;
+  warnings: string[];
+};
+
+export type LauncherConfig = {
+  java_path: string | null;
+  memory_mb: number;
+  game_dir: string | null;
+};
+
+/** 资源市场里的一条项目（CurseForge 或 Modrinth）。 */
+export type MarketProject = {
+  source: string;
+  id: string;
+  slug: string;
+  name: string;
+  summary: string;
+  icon: string | null;
+  downloads: number;
+  author: string;
+  kind: string;
+};
+
+/** 项目下的一个可下载文件。 */
+export type MarketFile = {
+  name: string;
+  version: string;
+  gameVersions: string[];
+  loaders: string[];
+  url: string;
+  size: number | null;
+  sha1: string | null;
+  folder: string;
+};
+
+/** 装完一个市场文件的结果。 */
+export type MarketInstallReport = {
+  fileName: string;
+  folder: string;
+  path: string;
+  skipped: boolean;
+};
+
+export function errText(err: unknown): string {
+  if (err && typeof err === "object") {
+    const e = err as { code?: string; message?: string };
+    const parts = [e.code, e.message].filter((v): v is string => typeof v === "string" && v.length > 0);
+    if (parts.length > 0) return parts.join(" · ");
+  }
+  return String(err);
+}
+
+/** 安装进度事件的阶段名 → 中文说明。 */
+export const STAGE_TEXT: Record<string, string> = {
+  manifest: "拉取版本清单",
+  client: "下载客户端主 jar",
+  libraries: "下载依赖库",
+  natives: "解压本地库",
+  "assets-index": "下载资源索引",
+  assets: "下载资源文件",
+};
+
+export const api = {
+  ping: () => invoke<string>("ping"),
+  javaList: () => invoke<JavaInfo[]>("get_java_list"),
+  installJava: (major: number) => invoke<JavaRuntime>("install_java", { major }),
+  listJavaRuntimes: () => invoke<JavaRuntime[]>("list_java_runtimes"),
+  listInstances: () => invoke<GameInstance[]>("list_instances"),
+  createInstance: (name: string, version: string) =>
+    invoke<GameInstance>("create_instance", { name, version }),
+  deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
+  importLocalVersions: () => invoke<ImportedInstance[]>("import_local_versions"),
+  syncInstanceFiles: (instanceId: string) =>
+    invoke<CarryReport>("sync_instance_files", { instanceId }),
+  importModpack: (path: string) => invoke<ImportReport>("import_modpack", { path }),
+  downloadPendingMods: (instanceId: string) =>
+    invoke<PendingReport>("download_pending_mods", { instanceId }),
+  verifyInstance: (instanceId: string) =>
+    invoke<VerifyReport>("verify_instance", { instanceId }),
+  installInstanceLoader: (
+    instanceId: string,
+    loader: string,
+    loaderVersion?: string | null,
+    mcVersion?: string | null,
+    javaPath?: string | null,
+  ) =>
+    invoke<LoaderReport>("install_instance_loader", {
+      instanceId,
+      loader,
+      loaderVersion: loaderVersion ?? null,
+      mcVersion: mcVersion ?? null,
+      javaPath: javaPath ?? null,
+    }),
+  startLogin: () => invoke<void>("start_login"),
+  exchangeCode: (code: string) => invoke<Account>("exchange_code", { code }),
+  getAccount: () => invoke<Account | null>("get_account"),
+  refreshAccount: () => invoke<Account>("refresh_account"),
+  logout: () => invoke<void>("logout"),
+
+  getConfig: () => invoke<LauncherConfig>("get_config"),
+  saveConfig: (cfg: LauncherConfig) => invoke<void>("save_config", { cfg }),
+
+  fetchVersionList: () => invoke<VersionEntry[]>("fetch_version_list"),
+  installVersion: (version: string, withAssets: boolean) =>
+    invoke<InstallReport>("install_version", { version, withAssets }),
+  isVersionInstalled: (version: string) => invoke<boolean>("is_version_installed", { version }),
+
+  launchInstance: (id: string, javaPath?: string, memoryMb?: number) =>
+    invoke<LaunchOutcome>("launch_instance", { id, javaPath, memoryMb }),
+  readLatestLog: (id: string, maxLines = 200) =>
+    invoke<string>("read_latest_log", { id, maxLines }),
+  killGameProcess: (pid: number) => invoke<void>("kill_game_process", { pid }),
+
+  searchMarket: (source: string, kind: string, query: string, page: number) =>
+    invoke<MarketProject[]>("search_market", { source, kind, query, page }),
+  listMarketFiles: (
+    source: string,
+    projectId: string,
+    kind: string,
+    gameVersion?: string | null,
+    loader?: string | null,
+  ) =>
+    invoke<MarketFile[]>("list_market_files", {
+      source,
+      projectId,
+      kind,
+      gameVersion: gameVersion ?? null,
+      loader: loader ?? null,
+    }),
+  installMarketFile: (instanceId: string, file: MarketFile) =>
+    invoke<MarketInstallReport>("install_market_file", { instanceId, file }),
+  installMarketModpack: (file: MarketFile) =>
+    invoke<ImportReport>("install_market_modpack", { file }),
+
+  onInstallProgress: (cb: (p: InstallProgress) => void): Promise<UnlistenFn> =>
+    listen<InstallProgress>("install-progress", (event) => cb(event.payload)),
+
+  onLoaderProgress: (cb: (p: InstallProgress) => void): Promise<UnlistenFn> =>
+    listen<InstallProgress>("loader-progress", (event) => cb(event.payload)),
+
+  onGameExit: (cb: (pid: number) => void): Promise<UnlistenFn> =>
+    listen<number>("game-exit", (event) => cb(event.payload)),
+};
