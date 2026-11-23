@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 type BgType = "none" | "image" | "gradient";
 
@@ -25,6 +26,8 @@ const emit = defineEmits<{
   (e: "reset"): void;
   (e: "close"): void;
 }>();
+
+const { t } = useI18n();
 
 // 浮层宽度与预估高度：只用来算落点和翻转，真实高度由内容决定
 const PANEL_W = 292;
@@ -83,11 +86,11 @@ onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKeyDown);
 });
 
-const typeOptions: { value: BgType; label: string }[] = [
-  { value: "none", label: "无" },
-  { value: "image", label: "图片" },
-  { value: "gradient", label: "纯色渐变" },
-];
+const typeOptions = computed<{ value: BgType; label: string }[]>(() => [
+  { value: "none", label: t("bg.typeNone") },
+  { value: "image", label: t("bg.typeImage") },
+  { value: "gradient", label: t("bg.typeGradient") },
+]);
 
 const gradientPresets = [
   "linear-gradient(135deg, #0d2438 0%, #0a1524 60%, #12324d 100%)",
@@ -107,20 +110,20 @@ const positionGrid = [
 
 const positionCells = positionGrid.flat();
 
-const positionLabels: Record<string, string> = {
-  "0% 0%": "左上",
-  "50% 0%": "上",
-  "100% 0%": "右上",
-  "0% 50%": "左",
-  "50% 50%": "居中",
-  "100% 50%": "右",
-  "0% 100%": "左下",
-  "50% 100%": "下",
-  "100% 100%": "右下",
+const POSITION_KEYS: Record<string, string> = {
+  "0% 0%": "bg.posTopLeft",
+  "50% 0%": "bg.posTop",
+  "100% 0%": "bg.posTopRight",
+  "0% 50%": "bg.posLeft",
+  "50% 50%": "bg.posCenter",
+  "100% 50%": "bg.posRight",
+  "0% 100%": "bg.posBottomLeft",
+  "50% 100%": "bg.posBottom",
+  "100% 100%": "bg.posBottomRight",
 };
 
 function positionText(value: string) {
-  return positionLabels[value] ?? "居中";
+  return t(POSITION_KEYS[value] ?? "bg.posCenter");
 }
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -168,7 +171,7 @@ async function onFileChange(e: Event) {
   input.value = "";
   if (!file) return;
   if (!file.type.startsWith("image/")) {
-    localHint.value = "只支持图片文件";
+    localHint.value = t("bg.onlyImages");
     return;
   }
   reading.value = true;
@@ -177,7 +180,7 @@ async function onFileChange(e: Event) {
     const dataUrl = await compressToDataUrl(file);
     emit("update", { type: "image", image: dataUrl });
   } catch (err) {
-    localHint.value = "这张图读不出来，换一张试试";
+    localHint.value = t("bg.imageUnreadable");
     console.warn("[instance-bg] 图片压缩失败", err);
   } finally {
     reading.value = false;
@@ -244,9 +247,9 @@ function onReset() {
       <header class="bg-head">
         <span class="bg-title">
           <span class="bg-dot" aria-hidden="true" />
-          卡片背景
+          {{ t("bg.title") }}
         </span>
-        <button class="bg-x" type="button" title="关闭" @click="emit('close')">×</button>
+        <button class="bg-x" type="button" :title="t('bg.close')" @click="emit('close')">×</button>
       </header>
 
       <p class="bg-name" :title="name">{{ name }}</p>
@@ -267,14 +270,14 @@ function onReset() {
       <div v-if="config.type === 'image'" class="bg-block">
         <div class="bg-pick">
           <span class="bg-thumb" :style="thumbStyle">
-            <span v-if="!config.image" class="bg-thumb-empty">未选图</span>
+            <span v-if="!config.image" class="bg-thumb-empty">{{ t("bg.noImage") }}</span>
           </span>
           <button type="button" class="bg-file" :disabled="reading" @click="pickFile">
-            {{ reading ? "处理中…" : config.image ? "换一张" : "选择图片" }}
+            {{ reading ? t("bg.reading") : config.image ? t("bg.changeImage") : t("bg.pickImage") }}
           </button>
         </div>
         <div class="bg-pos">
-          <span class="row-label">位置<b>{{ positionText(config.position) }}</b></span>
+          <span class="row-label">{{ t("bg.position") }}<b>{{ positionText(config.position) }}</b></span>
           <div class="bg-pos-grid">
             <button
               v-for="cell in positionCells"
@@ -290,7 +293,7 @@ function onReset() {
       </div>
 
       <div v-else-if="config.type === 'gradient'" class="bg-block">
-        <div class="row-label">预设</div>
+        <div class="row-label">{{ t("bg.preset") }}</div>
         <div class="bg-swatches">
           <button
             v-for="preset in gradientPresets"
@@ -299,7 +302,7 @@ function onReset() {
             class="bg-swatch"
             :class="{ on: config.color === preset }"
             :style="{ background: preset }"
-            title="渐变"
+            :title="t('bg.gradient')"
             @click="emit('update', { color: preset })"
           />
           <button
@@ -312,7 +315,7 @@ function onReset() {
             :title="preset"
             @click="emit('update', { color: preset })"
           />
-          <label class="bg-swatch bg-swatch-pick" title="自定义颜色">
+          <label class="bg-swatch bg-swatch-pick" :title="t('bg.customColor')">
             <span class="bg-swatch-inner" :style="{ background: solidColor }" />
             <input type="color" :value="solidColor" @input="onColor" />
           </label>
@@ -321,7 +324,7 @@ function onReset() {
 
       <div v-if="config.type !== 'none'" class="bg-sliders">
         <div class="row">
-          <span class="row-label">不透明度<b>{{ config.opacity }}%</b></span>
+          <span class="row-label">{{ t("bg.opacity") }}<b>{{ config.opacity }}%</b></span>
           <input
             class="slider"
             type="range"
@@ -333,7 +336,7 @@ function onReset() {
           />
         </div>
         <div class="row">
-          <span class="row-label">模糊<b>{{ config.blur }}px</b></span>
+          <span class="row-label">{{ t("bg.blur") }}<b>{{ config.blur }}px</b></span>
           <input
             class="slider"
             type="range"
@@ -345,7 +348,7 @@ function onReset() {
           />
         </div>
         <div class="row">
-          <span class="row-label">暗化遮罩<b>{{ config.scrim }}%</b></span>
+          <span class="row-label">{{ t("bg.scrim") }}<b>{{ config.scrim }}%</b></span>
           <input
             class="slider"
             type="range"
@@ -358,12 +361,12 @@ function onReset() {
         </div>
       </div>
 
-      <p v-if="config.type === 'none'" class="bg-tip">保持默认外观，不叠加任何背景层。</p>
+      <p v-if="config.type === 'none'" class="bg-tip">{{ t("bg.keepDefault") }}</p>
       <p v-if="hintText" class="bg-tip warn">{{ hintText }}</p>
 
       <footer class="bg-foot">
-        <button type="button" class="bg-reset" @click="onReset">重置</button>
-        <button type="button" class="bg-done" @click="emit('close')">完成</button>
+        <button type="button" class="bg-reset" @click="onReset">{{ t("bg.reset") }}</button>
+        <button type="button" class="bg-done" @click="emit('close')">{{ t("bg.done") }}</button>
       </footer>
 
       <input

@@ -1,8 +1,10 @@
 import { createApp } from "vue";
 import App from "./App.vue";
+import { i18n } from "./i18n";
 import "./styles/global.css";
 
 const app = createApp(App);
+app.use(i18n);
 
 // 开发期错误兜底：把运行时异常直接怼到页面上，方便截图定位
 if (import.meta.env.DEV) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api, errText, type Account } from "../api";
 import CardContainer from "@/components/ui/card-3d/CardContainer.vue";
@@ -15,6 +16,8 @@ const emit = defineEmits<{
 
 type Phase = "idle" | "waiting" | "exchanging" | "error";
 
+const { t } = useI18n();
+
 const phase = ref<Phase>("idle");
 const progress = ref("");
 const errorText = ref("");
@@ -22,12 +25,12 @@ const refreshing = ref(false);
 let unlisteners: UnlistenFn[] = [];
 
 const expireText = computed(() => {
-  if (!props.account || !props.account.expiresAt) return "未知";
+  if (!props.account || !props.account.expiresAt) return t("account.expireUnknown");
   const left = props.account.expiresAt - Math.floor(Date.now() / 1000);
-  if (left <= 0) return "已过期（需要刷新）";
+  if (left <= 0) return t("account.expired");
   const minutes = Math.floor(left / 60);
-  if (minutes < 60) return `${minutes} 分钟后过期`;
-  return `${Math.floor(minutes / 60)} 小时后过期`;
+  if (minutes < 60) return t("account.expiresInMinutes", { n: minutes });
+  return t("account.expiresInHours", { n: Math.floor(minutes / 60) });
 });
 
 function cleanup() {
@@ -49,7 +52,7 @@ async function exchange(code: string) {
     phase.value = "idle";
     progress.value = "";
     emit("changed", account);
-    emit("notify", `已登录：${account.name}`, "ok");
+    emit("notify", t("account.loggedIn", { name: account.name }), "ok");
   } catch (err) {
     fail(errText(err));
   } finally {
@@ -62,7 +65,7 @@ async function beginLogin() {
   cleanup();
   phase.value = "waiting";
   errorText.value = "";
-  progress.value = "正在打开微软登录窗口…";
+  progress.value = t("account.opening");
 
   unlisteners.push(
     await listen<string>("login-progress", (event) => {
@@ -71,7 +74,7 @@ async function beginLogin() {
   );
   unlisteners.push(
     await listen<string>("msa-code", (event) => {
-      progress.value = "已拿到授权码，正在换取令牌…";
+      progress.value = t("account.exchanging");
       void exchange(event.payload);
     })
   );
@@ -96,7 +99,7 @@ async function refresh() {
   try {
     const account = await api.refreshAccount();
     emit("changed", account);
-    emit("notify", "令牌已刷新", "ok");
+    emit("notify", t("account.refreshed"), "ok");
   } catch (err) {
     emit("notify", errText(err), "err");
   } finally {
@@ -110,7 +113,7 @@ async function logout() {
     emit("changed", null);
     phase.value = "idle";
     progress.value = "";
-    emit("notify", "已退出账号", "ok");
+    emit("notify", t("account.loggedOut"), "ok");
   } catch (err) {
     emit("notify", errText(err), "err");
   }
@@ -123,11 +126,11 @@ onUnmounted(cleanup);
   <section class="page">
     <header class="page-head">
       <div>
-        <h1>账号</h1>
-        <p>只支持微软正版登录，走官方 XBL 链路拿 Minecraft 令牌。</p>
+        <h1>{{ t("account.title") }}</h1>
+        <p>{{ t("account.subtitle") }}</p>
       </div>
-      <span v-if="account" class="tag">已连接</span>
-      <span v-else class="tag muted">未登录</span>
+      <span v-if="account" class="tag">{{ t("account.connected") }}</span>
+      <span v-else class="tag muted">{{ t("account.notSignedIn") }}</span>
     </header>
 
     <CardContainer v-if="account" class="acc-3d">
@@ -143,17 +146,17 @@ onUnmounted(cleanup);
       </div>
       <dl class="facts">
         <div>
-          <dt>令牌状态</dt>
+          <dt>{{ t("account.tokenStatus") }}</dt>
           <dd>{{ expireText }}</dd>
         </div>
         <div>
-          <dt>刷新令牌</dt>
-          <dd>{{ account.hasRefreshToken ? "已保存（可免登录续期）" : "未下发" }}</dd>
+          <dt>{{ t("account.refreshToken") }}</dt>
+          <dd>{{ account.hasRefreshToken ? t("account.refreshSaved") : t("account.refreshMissing") }}</dd>
         </div>
       </dl>
       <div class="profile-actions">
-        <button :disabled="refreshing" @click="refresh">{{ refreshing ? "刷新中…" : "刷新令牌" }}</button>
-        <button class="ghost-danger" @click="logout">退出登录</button>
+        <button :disabled="refreshing" @click="refresh">{{ refreshing ? t("account.refreshing") : t("account.refreshToken") }}</button>
+        <button class="ghost-danger" @click="logout">{{ t("account.logoutBtn") }}</button>
       </div>
     </div>
         </CardItem>
@@ -161,23 +164,23 @@ onUnmounted(cleanup);
     </CardContainer>
 
     <div v-else class="panel login">
-      <h2>绑定 Microsoft 账号</h2>
+      <h2>{{ t("account.bindTitle") }}</h2>
       <p>
-        点击后会弹出微软官方登录窗口，登录完成后窗口自动关闭。<br />
-        授权码留在本地换取令牌，密码不会经过启动器。
+        {{ t("account.bindLine1") }}<br />
+        {{ t("account.bindLine2") }}
       </p>
       <button
         class="primary"
         :disabled="phase === 'waiting' || phase === 'exchanging'"
         @click="beginLogin"
       >
-        {{ phase === "waiting" || phase === "exchanging" ? "登录中…" : "使用 Microsoft 登录" }}
+        {{ phase === "waiting" || phase === "exchanging" ? t("account.signingIn") : t("account.signIn") }}
       </button>
       <p v-if="progress" class="progress">{{ progress }}</p>
       <p v-if="phase === 'error'" class="error">{{ errorText }}</p>
       <ul class="tips">
-        <li>需要账号已购买 Minecraft: Java 版，否则最后一步查档案会 404。</li>
-        <li>报「还没有 Xbox 档案」时，先去 xbox.com 建一个角色再回来。</li>
+        <li>{{ t("account.tip1") }}</li>
+        <li>{{ t("account.tip2") }}</li>
       </ul>
     </div>
   </section>

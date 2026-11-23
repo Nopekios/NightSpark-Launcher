@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "./i18n";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type GameInstance = {
@@ -121,6 +122,8 @@ export type LauncherConfig = {
   java_path: string | null;
   memory_mb: number;
   game_dir: string | null;
+  /** null 表示用户还没选过语言，首次启动要弹选择框 */
+  language: string | null;
 };
 
 /** 资源市场里的一条项目（CurseForge 或 Modrinth）。 */
@@ -165,15 +168,12 @@ export function errText(err: unknown): string {
   return String(err);
 }
 
-/** 安装进度事件的阶段名 → 中文说明。 */
-export const STAGE_TEXT: Record<string, string> = {
-  manifest: "拉取版本清单",
-  client: "下载客户端主 jar",
-  libraries: "下载依赖库",
-  natives: "解压本地库",
-  "assets-index": "下载资源索引",
-  assets: "下载资源文件",
-};
+/** 安装进度事件的阶段名 → 当前语言的说明；没有对应键时原样返回阶段名。 */
+export function stageText(stage: string): string {
+  const key = `stage.${stage.replace(/-/g, "_")}`;
+  const text = t(key);
+  return text === key ? stage : text;
+}
 
 export const api = {
   ping: () => invoke<string>("ping"),

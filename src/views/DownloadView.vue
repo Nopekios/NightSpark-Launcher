@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { api, errText, STAGE_TEXT, type InstallProgress, type VersionEntry } from "../api";
+import { api, errText, stageText as stageLabel, type InstallProgress, type VersionEntry } from "../api";
+import { useI18n } from "vue-i18n";
 import MarketPanel from "../components/MarketPanel.vue";
 import MorphingTabs from "@/components/ui/morphing-tabs/MorphingTabs.vue";
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: "notify", text: string, tone?: "ok" | "err"): void;
@@ -14,10 +17,10 @@ const emit = defineEmits<{
 const tab = ref<"vanilla" | "market">("vanilla");
 
 // inspira MorphingTabs 用的是中文标签，这里做双向映射
-const TAB_LABELS = ["官方版本", "资源市场"] as const;
-const activeLabel = computed(() => (tab.value === "vanilla" ? TAB_LABELS[0] : TAB_LABELS[1]));
+const tabLabels = computed(() => [t("download.tabVanilla"), t("download.tabMarket")]);
+const activeLabel = computed(() => (tab.value === "vanilla" ? tabLabels.value[0] : tabLabels.value[1]));
 function switchTab(label: string) {
-  tab.value = label === TAB_LABELS[1] ? "market" : "vanilla";
+  tab.value = label === tabLabels.value[1] ? "market" : "vanilla";
 }
 
 const versions = ref<VersionEntry[]>([]);
@@ -53,7 +56,7 @@ const percent = computed(() => {
 const stageText = computed(() => {
   const p = progress.value;
   if (!p) return "";
-  const label = STAGE_TEXT[p.stage] ?? p.stage;
+  const label = stageLabel(p.stage);
   return p.total > 0 ? `${label} ${p.done}/${p.total}` : label;
 });
 
@@ -90,7 +93,11 @@ async function install(item: VersionEntry) {
     installedMap.value[item.id] = true;
     emit(
       "notify",
-      `${report.version} 安装完成：${report.libraries} 个依赖库，${report.assets} 个资源文件`
+      t("download.installDone", {
+        version: report.version,
+        libraries: report.libraries,
+        assets: report.assets,
+      })
     );
   } catch (err) {
     emit("notify", errText(err), "err");
@@ -124,7 +131,7 @@ onUnmounted(() => {
   <section class="page">
     <MorphingTabs
       class="tab-goo"
-      :tabs="[...TAB_LABELS]"
+      :tabs="tabLabels"
       :active-tab="activeLabel"
       :margin="16"
       :blur-std-dev="5"
@@ -136,48 +143,50 @@ onUnmounted(() => {
     <div v-if="tab === 'vanilla'" class="subpage">
     <header class="page-head">
       <div>
-        <h1>游戏版本</h1>
+        <h1>{{ t("download.title") }}</h1>
         <p>
-          直接从 Mojang 官方清单拉取<span v-if="versions.length > 0">，当前共 {{ versions.length }} 个版本</span>
+          {{ t("download.subtitle") }}<span v-if="versions.length > 0">{{
+            t("download.subtitleCount", { n: versions.length })
+          }}</span>
         </p>
       </div>
       <div class="head-actions">
         <label class="switch">
           <input v-model="showSnapshots" type="checkbox" />
-          <span>显示快照</span>
+          <span>{{ t("download.showSnapshots") }}</span>
         </label>
         <label class="switch">
           <input v-model="withAssets" type="checkbox" />
-          <span>同时下载资源文件</span>
+          <span>{{ t("download.withAssets") }}</span>
         </label>
         <button :disabled="loading || !!installing" @click="loadVersions">
-          {{ loading ? "拉取中…" : "刷新清单" }}
+          {{ loading ? t("download.loading") : t("download.refresh") }}
         </button>
       </div>
     </header>
 
     <div v-if="installing" class="progress-panel panel">
       <div class="progress-head">
-        <strong>正在安装 {{ installing }}</strong>
+        <strong>{{ t("download.installing", { id: installing }) }}</strong>
         <span>{{ stageText }}</span>
       </div>
       <div class="bar">
         <div class="bar-fill" :style="{ width: `${percent}%` }" />
       </div>
-      <p class="hint">首次安装依赖库和资源会慢一些，重复安装会自动跳过已有文件。</p>
+      <p class="hint">{{ t("download.hint") }}</p>
     </div>
 
     <div v-if="loadErr" class="notice err">
       <div>
-        <strong>版本清单拉取失败</strong>
+        <strong>{{ t("download.loadFailed") }}</strong>
         <p>{{ loadErr }}</p>
       </div>
-      <button @click="loadVersions">重试</button>
+      <button @click="loadVersions">{{ t("common.retry") }}</button>
     </div>
 
     <div class="toolbar">
-      <input v-model="query" class="search" placeholder="搜索版本号，例如 1.20.1" />
-      <span class="count">{{ filtered.length }} 个匹配</span>
+      <input v-model="query" class="search" :placeholder="t('download.searchPh')" />
+      <span class="count">{{ t("download.matchCount", { n: filtered.length }) }}</span>
     </div>
 
     <div v-if="loading && versions.length === 0" class="skeleton-list">
@@ -190,31 +199,42 @@ onUnmounted(() => {
           <h2>
             {{ item.id }}
             <span class="tag" :class="item.type === 'release' ? 'ok' : 'muted'">
-              {{ item.type === "release" ? "正式版" : item.type === "snapshot" ? "快照" : item.type }}
+              {{
+                item.type === "release"
+                  ? t("download.release")
+                  : item.type === "snapshot"
+                    ? t("download.snapshot")
+                    : item.type
+              }}
             </span>
           </h2>
-          <p>发布于 {{ dateText(item.releaseTime) }}</p>
+          <p>{{ t("download.published", { date: dateText(item.releaseTime) }) }}</p>
         </div>
         <div class="row-side">
-          <span v-if="installedMap[item.id]" class="state ok">已安装</span>
+          <span v-if="installedMap[item.id]" class="state ok">{{ t("download.installed") }}</span>
           <button
             class="primary"
             :disabled="!!installing"
             @click="install(item)"
           >
-            {{ installing === item.id ? "安装中…" : installedMap[item.id] ? "重新校验" : "下载安装" }}
+            {{
+              installing === item.id
+                ? t("download.installingNow")
+                : installedMap[item.id]
+                  ? t("download.reverify")
+                  : t("download.install")
+            }}
           </button>
         </div>
       </article>
     </div>
 
     <div v-if="filtered.length > visible.length" class="more">
-      <button @click="limit += 30">再显示 30 个</button>
+      <button @click="limit += 30">{{ t("download.more") }}</button>
     </div>
 
     <p class="foot">
-      安装位置：共享 <code>.minecraft</code> 目录下的 versions / libraries / assets，实例之间不会重复下载。
-      资源文件较大（约 500MB），只想先跑起来可以关掉上面的开关。
+      {{ t("download.footA") }}<code>.minecraft</code>{{ t("download.footB") }}
     </p>
     </div>
 

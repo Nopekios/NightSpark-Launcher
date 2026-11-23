@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import type { Account } from "../api";
 
 type ViewKey = "home" | "download" | "account" | "settings";
@@ -12,12 +14,22 @@ const emit = defineEmits<{
   (e: "navigate", view: ViewKey): void;
 }>();
 
-const items: Array<{ key: ViewKey; label: string; hint: string; icon: string }> = [
-  { key: "home", label: "启动", hint: "实例大厅", icon: "M3 11.2 12 4l9 7.2V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
-  { key: "download", label: "下载", hint: "版本与整合包", icon: "M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" },
-  { key: "account", label: "账号", hint: "微软正版", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 8a8 8 0 0 1 16 0" },
-  { key: "settings", label: "设置", hint: "Java 与内存", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8.4-3a8.4 8.4 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a8 8 0 0 0-2-1.2L15.6 3H8.4l-.4 2.5a8 8 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a8.4 8.4 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a8 8 0 0 0 2 1.2l.4 2.5h7.2l.4-2.5a8 8 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" },
-];
+const { t } = useI18n();
+
+const iconOf = {
+  home: "M3 11.2 12 4l9 7.2V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
+  download: "M12 3v11m0 0 4-4m-4 4-4-4M4 20h16",
+  account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 8a8 8 0 0 1 16 0",
+  settings:
+    "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8.4-3a8.4 8.4 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a8 8 0 0 0-2-1.2L15.6 3H8.4l-.4 2.5a8 8 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a8.4 8.4 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a8 8 0 0 0 2 1.2l.4 2.5h7.2l.4-2.5a8 8 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z",
+};
+
+const items = computed<Array<{ key: ViewKey; label: string; hint: string; icon: string }>>(() => [
+  { key: "home", label: t("nav.home"), hint: t("nav.homeHint"), icon: iconOf.home },
+  { key: "download", label: t("nav.download"), hint: t("nav.downloadHint"), icon: iconOf.download },
+  { key: "account", label: t("nav.account"), hint: t("nav.accountHint"), icon: iconOf.account },
+  { key: "settings", label: t("nav.settings"), hint: t("nav.settingsHint"), icon: iconOf.settings },
+]);
 
 function hueOf(uuid: string): number {
   let sum = 0;
@@ -43,7 +55,7 @@ function hueOf(uuid: string): number {
 
     <div class="brand-rule" />
 
-    <span class="nav-cap">导航</span>
+    <span class="nav-cap">{{ t("nav.caption") }}</span>
 
     <nav class="nav">
       <button
@@ -71,8 +83,8 @@ function hueOf(uuid: string): number {
       </span>
       <span v-else class="avatar empty">?</span>
       <span class="account-meta">
-        <strong>{{ account ? account.name : "未登录" }}</strong>
-        <em>{{ account ? "微软账号已连接" : "点击绑定正版账号" }}</em>
+        <strong>{{ account ? account.name : t("nav.notLoggedIn") }}</strong>
+        <em>{{ account ? t("nav.connected") : t("nav.bindAccount") }}</em>
       </span>
     </button>
   </aside>

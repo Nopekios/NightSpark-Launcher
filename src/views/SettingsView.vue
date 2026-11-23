@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   api,
   errText,
@@ -7,29 +8,59 @@ import {
   type JavaRuntime,
   type LauncherConfig,
 } from "../api";
+import { SUPPORTED_LOCALES, currentLocale, setLocale, type Locale } from "../i18n";
 
 const emit = defineEmits<{
   (e: "notify", text: string, tone?: "ok" | "err"): void;
 }>();
 
+const { t } = useI18n();
+
 const javas = ref<JavaInfo[]>([]);
 const scanning = ref(false);
 const selected = ref<string | null>(null);
-const tab = ref<"runtime" | "install" | "memory" | "paths">("runtime");
+const tab = ref<"runtime" | "install" | "memory" | "paths" | "language">("runtime");
 const scanError = ref("");
 const memory = ref(4096);
 const saving = ref(false);
 const saved = ref(false);
-const cfgRef = ref<LauncherConfig>({ java_path: null, memory_mb: 4096, game_dir: null });
+const cfgRef = ref<LauncherConfig>({
+  java_path: null,
+  memory_mb: 4096,
+  game_dir: null,
+  language: null,
+});
+const lang = ref<Locale>(currentLocale());
+let cfgLoaded = false;
+const switchingLang = ref<Locale | null>(null);
 
 // 启动器自己下的 Java（绕开系统里没装低版本 Java 的坑）。
 const runtimes = ref<JavaRuntime[]>([]);
 const installingMajor = ref<number | null>(null);
-const MAJOR_HINTS = [
-  { major: 8, note: "1.16.5 及以下的老版本" },
+const MAJOR_HINTS = computed(() => [
+  { major: 8, note: t("settings.noteLegacy") },
   { major: 17, note: "1.17 ~ 1.20.4" },
-  { major: 21, note: "1.20.5 及以上" },
-];
+  { major: 21, note: t("settings.noteModern") },
+]);
+
+async function switchLanguage(next: Locale) {
+  if (next === lang.value || switchingLang.value) return;
+  switchingLang.value = next;
+  const previous = lang.value;
+  lang.value = next;
+  setLocale(next);
+  try {
+    // 配置还没读回来就切语言时先补一次，避免把默认值写回磁盘、覆盖已有的 Java 路径和内存设置
+    if (!cfgLoaded) await loadConfig();
+    await api.saveConfig({ ...cfgRef.value, language: next });
+  } catch (err) {
+    lang.value = previous;
+    setLocale(previous);
+    emit("notify", t("language.failed", { reason: errText(err) }), "err");
+  } finally {
+    switchingLang.value = null;
+  }
+}
 
 function runtimeOf(major: number): JavaRuntime | null {
   return runtimes.value.find((item) => item.major === major) ?? null;
@@ -48,7 +79,7 @@ async function installJava(major: number) {
   installingMajor.value = major;
   try {
     const runtime = await api.installJava(major);
-    emit("notify", `Java ${runtime.major} 装好了：${runtime.path}`);
+    emit("notify", t("settings.javaInstallToast", { major: runtime.major, path: runtime.path }));
     await Promise.all([loadRuntimes(), scan()]);
     if (!selected.value) selected.value = runtime.path;
   } catch (err) {
@@ -80,6 +111,7 @@ async function loadConfig() {
     cfgRef.value = cfg;
     memory.value = cfg.memory_mb;
     if (cfg.java_path) selected.value = cfg.java_path;
+    cfgLoaded = true;
   } catch (err) {
     scanError.value = errText(err);
   }
@@ -98,7 +130,7 @@ async function save() {
     await api.saveConfig(next);
     cfgRef.value = next;
     saved.value = true;
-    emit("notify", "启动设置已保存");
+    emit("notify", t("settings.savedToast"));
   } catch (err) {
     emit("notify", errText(err), "err");
   } finally {
@@ -115,13 +147,15 @@ onMounted(async () => {
   <section class="page">
     <header class="page-head">
       <div>
-        <h1>设置</h1>
-        <p>Java 运行时自动扫描，选定后直接用于组装启动命令行。</p>
+        <h1>{{ t("settings.title") }}</h1>
+        <p>{{ t("settings.subtitle") }}</p>
       </div>
       <div class="head-actions">
-        <button :disabled="scanning" @click="scan">{{ scanning ? "扫描中…" : "重新扫描" }}</button>
+        <button :disabled="scanning" @click="scan">
+          {{ scanning ? t("settings.scanning") : t("settings.scan") }}
+        </button>
         <button class="primary" :disabled="saving" @click="save">
-          {{ saving ? "保存中…" : saved ? "已保存" : "保存设置" }}
+          {{ saving ? t("settings.saving") : saved ? t("settings.saved") : t("settings.save") }}
         </button>
       </div>
     </header>
@@ -129,28 +163,31 @@ onMounted(async () => {
     <div class="set-shell">
       <nav class="set-nav">
         <button :class="{ on: tab === 'runtime' }" @click="tab = 'runtime'">
-          <strong>运行时</strong><span>Java 选择</span>
+          <strong>{{ t("settings.tabRuntime") }}</strong><span>{{ t("settings.tabRuntimeHint") }}</span>
         </button>
         <button :class="{ on: tab === 'install' }" @click="tab = 'install'">
-          <strong>一键装</strong><span>官方运行时</span>
+          <strong>{{ t("settings.tabInstall") }}</strong><span>{{ t("settings.tabInstallHint") }}</span>
         </button>
         <button :class="{ on: tab === 'memory' }" @click="tab = 'memory'">
-          <strong>内存</strong><span>Xmx 分配</span>
+          <strong>{{ t("settings.tabMemory") }}</strong><span>{{ t("settings.tabMemoryHint") }}</span>
         </button>
         <button :class="{ on: tab === 'paths' }" @click="tab = 'paths'">
-          <strong>目录</strong><span>缓存与实例</span>
+          <strong>{{ t("settings.tabPaths") }}</strong><span>{{ t("settings.tabPathsHint") }}</span>
+        </button>
+        <button :class="{ on: tab === 'language' }" @click="tab = 'language'">
+          <strong>{{ t("settings.tabLanguage") }}</strong><span>{{ t("settings.tabLanguageHint") }}</span>
         </button>
       </nav>
       <div class="set-panes">
     <Transition name="pane" mode="out-in">
       <div v-if="tab === 'runtime'" class="panel block">
       <div class="block-head">
-        <h2>Java 运行时</h2>
-        <span class="tag muted">{{ javas.length }} 个候选</span>
+        <h2>{{ t("settings.javaTitle") }}</h2>
+        <span class="tag muted">{{ t("settings.javaCount", { count: javas.length }) }}</span>
       </div>
       <p v-if="scanError" class="error">{{ scanError }}</p>
       <p v-else-if="javas.length === 0 && !scanning" class="hint">
-        没扫到 Java。装一个 JDK 17 / 21（Temurin 即可），或者把 java.exe 加进 PATH。
+        {{ t("settings.javaEmpty") }}
       </p>
       <ul v-else class="java-list">
         <li
@@ -164,18 +201,18 @@ onMounted(async () => {
             <span class="path" :title="item.path">{{ item.path }}</span>
             <em>Java {{ item.version }}</em>
           </div>
-          <span class="check">{{ selected === item.path ? "已选择" : "" }}</span>
+          <span class="check">{{ selected === item.path ? t("settings.javaSelected") : "" }}</span>
         </li>
       </ul>
     </div>
 
     <div v-else-if="tab === 'install'" class="panel block">
       <div class="block-head">
-        <h2>一键装 Java</h2>
-        <span class="tag muted">Mojang 官方运行时</span>
+        <h2>{{ t("settings.installTitle") }}</h2>
+        <span class="tag muted">{{ t("settings.installTag") }}</span>
       </div>
       <p class="hint">
-        没合适版本的 Java 时在这儿下一个，装到 %APPDATA%\NightSpark\runtimes\，下载进度看底部进度条。
+        {{ t("settings.installHint") }}
       </p>
       <ul class="runtime-list">
         <li v-for="item in MAJOR_HINTS" :key="item.major">
@@ -183,16 +220,16 @@ onMounted(async () => {
             <strong>Java {{ item.major }}</strong>
             <span class="rt-note">{{ item.note }}</span>
             <span v-if="runtimeOf(item.major)" class="tag ok">
-              已装 · {{ runtimeOf(item.major)?.version }}
+              {{ t("settings.installDone", { version: runtimeOf(item.major)?.version }) }}
             </span>
           </div>
           <button :disabled="!!installingMajor" @click="installJava(item.major)">
             {{
               installingMajor === item.major
-                ? "下载中…"
+                ? t("settings.installDownloading")
                 : runtimeOf(item.major)
-                  ? "重新下载"
-                  : "下载安装"
+                  ? t("settings.installRedownload")
+                  : t("settings.installStart")
             }}
           </button>
         </li>
@@ -201,30 +238,51 @@ onMounted(async () => {
 
     <div v-else-if="tab === 'memory'" class="panel block">
       <div class="block-head">
-        <h2>内存分配</h2>
-        <span class="tag ok">生效中</span>
+        <h2>{{ t("settings.memoryTitle") }}</h2>
+        <span class="tag ok">{{ t("settings.memoryActive") }}</span>
       </div>
       <div class="memory">
         <input v-model.number="memory" type="range" min="1024" max="16384" step="512" />
         <strong>{{ (memory / 1024).toFixed(1) }} GB</strong>
       </div>
       <p class="hint">
-        取值范围 1–16 GB，启动时作为 -Xmx 传给 JVM；带整合包建议 6 GB 以上。
+        {{ t("settings.memoryHint") }}
       </p>
+    </div>
+
+    <div v-else-if="tab === 'paths'" class="panel block">
+      <div class="block-head">
+        <h2>{{ t("settings.pathsTitle") }}</h2>
+      </div>
+      <ul class="kv">
+        <li>
+          <span>{{ t("settings.pathAccount") }}</span>
+          <em>%APPDATA%\NightSpark\account.json</em>
+        </li>
+        <li>
+          <span>{{ t("settings.pathInstances") }}</span>
+          <em>%APPDATA%\NightSpark\instances\</em>
+        </li>
+      </ul>
     </div>
 
     <div v-else class="panel block">
       <div class="block-head">
-        <h2>目录</h2>
+        <h2>{{ t("language.title") }}</h2>
+        <span class="tag muted">{{ t("language.hint") }}</span>
       </div>
-      <ul class="kv">
-        <li>
-          <span>账号缓存</span>
-          <em>%APPDATA%\NightSpark\account.json</em>
-        </li>
-        <li>
-          <span>实例数据</span>
-          <em>%APPDATA%\NightSpark\instances\</em>
+      <ul class="lang-list">
+        <li
+          v-for="item in SUPPORTED_LOCALES"
+          :key="item.value"
+          :class="{ picked: lang === item.value }"
+          @click="switchLanguage(item.value)"
+        >
+          <strong>{{ item.label }}</strong>
+          <em>{{ item.value }}</em>
+          <span class="check">
+            {{ lang === item.value ? (switchingLang ? t("settings.saving") : "✓") : "" }}
+          </span>
         </li>
       </ul>
     </div>
@@ -315,7 +373,8 @@ onMounted(async () => {
 
 /* ── Java 运行时列表 ── */
 .runtime-list,
-.java-list {
+.java-list,
+.lang-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -325,7 +384,8 @@ onMounted(async () => {
 }
 
 .runtime-list li,
-.java-list li {
+.java-list li,
+.lang-list li {
   display: flex;
   overflow: hidden;
   align-items: center;
@@ -343,17 +403,20 @@ onMounted(async () => {
     background 0.22s ease;
 }
 
-.java-list li {
+.java-list li,
+.lang-list li {
   cursor: pointer;
 }
 
-.java-list li:hover {
+.java-list li:hover,
+.lang-list li:hover {
   border-color: rgba(0, 149, 255, 0.3);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 16px 34px -22px rgba(0, 149, 255, 0.85);
   transform: translateY(-1px);
 }
 
-.java-list li.picked {
+.java-list li.picked,
+.lang-list li.picked {
   border-color: rgba(0, 149, 255, 0.48);
   background: linear-gradient(100deg, rgba(0, 149, 255, 0.16) 0%, rgba(0, 149, 255, 0.03) 64%),
     rgba(12, 18, 27, 0.9);
@@ -579,11 +642,13 @@ onMounted(async () => {
 }
 
 /* 选中项左侧光条 */
-.java-list li {
+.java-list li,
+.lang-list li {
   position: relative;
 }
 
-.java-list li.picked::after {
+.java-list li.picked::after,
+.lang-list li.picked::after {
   content: "";
   position: absolute;
   left: 0;
@@ -618,3 +683,16 @@ onMounted(async () => {
 }
 
 </style>
+
+.lang-list li strong {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.lang-list li em {
+  flex: 1;
+  font-style: normal;
+  font-size: 11.5px;
+  color: rgba(160, 182, 205, 0.65);
+}

@@ -16,6 +16,8 @@ pub struct LauncherConfig {
     pub memory_mb: u32,
     /// 游戏目录覆盖值，None 表示使用默认 .minecraft
     pub game_dir: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 impl Default for LauncherConfig {
@@ -24,6 +26,7 @@ impl Default for LauncherConfig {
             java_path: None,
             memory_mb: 4096,
             game_dir: None,
+            language: None,
         }
     }
 }

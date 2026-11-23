@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import { currentLocale } from "../i18n";
 import {
   api,
   errText,
@@ -16,12 +18,14 @@ const emit = defineEmits<{
 }>();
 
 /** 资源类型：整合包下载后新建实例，其余装进选中实例。 */
-const kinds = [
-  { key: "mod", label: "模组" },
-  { key: "modpack", label: "整合包" },
-  { key: "resourcepack", label: "资源包" },
-  { key: "shader", label: "光影" },
-] as const;
+const { t } = useI18n();
+
+const kinds = computed(() => [
+  { key: "mod", label: t("market.kindMod") },
+  { key: "modpack", label: t("market.kindModpack") },
+  { key: "resourcepack", label: t("market.kindResourcepack") },
+  { key: "shader", label: t("market.kindShader") },
+]);
 
 /** 两条来源：CF 走镜像、Modrinth 走官方。 */
 const sources = [
@@ -29,13 +33,13 @@ const sources = [
   { key: "modrinth", label: "Modrinth" },
 ] as const;
 
-const loaders = [
-  { key: "", label: "不限" },
+const loaders = computed(() => [
+  { key: "", label: t("market.any") },
   { key: "forge", label: "Forge" },
   { key: "neoforge", label: "NeoForge" },
   { key: "fabric", label: "Fabric" },
   { key: "quilt", label: "Quilt" },
-] as const;
+]);
 
 const kind = ref<string>("mod");
 const source = ref<string>("curseforge");
@@ -64,7 +68,9 @@ let debounceTimer: number | undefined;
 
 const PAGE_SIZE = 20;
 const isModpack = computed(() => kind.value === "modpack");
-const kindLabel = computed(() => kinds.find((item) => item.key === kind.value)?.label ?? "资源");
+const kindLabel = computed(
+  () => kinds.value.find((item) => item.key === kind.value)?.label ?? t("market.kindFallback"),
+);
 const percent = computed(() => {
   const current = progress.value;
   if (!current || !current.total) return 0;
@@ -79,7 +85,7 @@ async function loadInstances() {
       targetInstance.value = instances.value[0].id;
     }
   } catch (err) {
-    emit("notify", `读实例列表失败：${errText(err)}`, "err");
+    emit("notify", t("market.instanceReadFail", { reason: errText(err) }), "err");
   }
 }
 
@@ -104,8 +110,8 @@ async function search(reset = true) {
     hasMore.value = list.length >= PAGE_SIZE;
     if (reset && list.length === 0) {
       loadErr.value = query.value.trim()
-        ? "没搜到，换个关键词或者换条来源试试。"
-        : "这条来源目前没返回内容，稍后再试或换条来源。";
+        ? t("market.empty")
+        : t("market.emptySource");
     }
   } catch (err) {
     if (seq !== searchSeq) return;
@@ -135,7 +141,7 @@ async function fetchFiles() {
       loader.value
     );
     if (files.value.length === 0) {
-      filesErr.value = "这个筛选条件下没有文件，把游戏版本或加载器放宽再试。";
+      filesErr.value = t("market.filesEmpty");
     }
   } catch (err) {
     filesErr.value = errText(err);
@@ -160,15 +166,15 @@ async function toggle(project: MarketProject) {
 async function install(file: MarketFile) {
   if (busyName.value) return;
   if (!isModpack.value && !targetInstance.value) {
-    emit("notify", "先在上面选一个要装进去的实例", "err");
+    emit("notify", t("market.pickInstance"), "err");
     return;
   }
   busyName.value = file.name;
-  progress.value = { stage: "准备下载", done: 0, total: 0 };
+  progress.value = { stage: t("market.stagePreparing"), done: 0, total: 0 };
   try {
     if (isModpack.value) {
       const report = await api.installMarketModpack(file);
-      emit("notify", `整合包已导入为实例「${report.instance.name}」`, "ok");
+      emit("notify", t("market.packImported", { name: report.instance.name }), "ok");
       await loadInstances();
       // 新实例建好后直接选中它，并把「我的实例」一起刷新，用户不用手动刷新页面。
       targetInstance.value = report.instance.id;
@@ -178,8 +184,8 @@ async function install(file: MarketFile) {
       emit(
         "notify",
         report.skipped
-          ? `${report.fileName} 本地已有且校验通过`
-          : `${report.fileName} 已装到 ${report.folder}/`,
+          ? t("market.fileExists", { file: report.fileName })
+          : t("market.fileInstalled", { file: report.fileName, folder: report.folder }),
         "ok"
       );
       // 实例内容变了，外层实例卡片上的统计也要跟着更新。
@@ -200,6 +206,7 @@ function sizeText(size: number | null) {
 }
 
 function countText(total: number) {
+  if (currentLocale() === "en-US") return total.toLocaleString("en-US");
   return total >= 10000 ? `${(total / 10000).toFixed(1)} 万` : String(total);
 }
 
@@ -259,31 +266,31 @@ onUnmounted(() => {
       <input
         v-model="query"
         class="search"
-        :placeholder="`搜索${kindLabel}`"
+        :placeholder="t('market.searchPh', { kind: kindLabel })"
       />
     </div>
 
     <div class="filters">
       <label class="field">
-        <span>版本</span>
-        <input v-model="gameVersion" placeholder="不限" />
+        <span>{{ t("market.versionField") }}</span>
+        <input v-model="gameVersion" :placeholder="t('market.any')" />
       </label>
       <label class="field">
-        <span>加载器</span>
+        <span>{{ t("market.loaderField") }}</span>
         <select v-model="loader">
           <option v-for="item in loaders" :key="item.key" :value="item.key">{{ item.label }}</option>
         </select>
       </label>
       <label v-if="!isModpack" class="field grow">
-        <span>装到</span>
+        <span>{{ t("market.targetField") }}</span>
         <select v-model="targetInstance">
-          <option v-if="instances.length === 0" value="">还没有实例</option>
+          <option v-if="instances.length === 0" value="">{{ t("market.noInstances") }}</option>
           <option v-for="item in instances" :key="item.id" :value="item.id">
             {{ item.name }}
           </option>
         </select>
       </label>
-      <span v-else class="field-note">整合包 → 新建独立实例</span>
+      <span v-else class="field-note">{{ t("market.modpackNote") }}</span>
     </div>
 
     <div v-if="progress" class="progress-panel panel">
@@ -298,7 +305,7 @@ onUnmounted(() => {
 
     <div v-if="loadErr" class="notice err">
       <span>{{ loadErr }}</span>
-      <button @click="search()">重试</button>
+      <button @click="search()">{{ t("common.retry") }}</button>
     </div>
 
     <div v-if="loading && projects.length === 0" class="skeleton-list">
@@ -318,17 +325,17 @@ onUnmounted(() => {
             <h2>
               {{ project.name }}
             </h2>
-            <p>{{ project.summary || "没有简介" }}</p>
+            <p>{{ project.summary || t("market.noSummary") }}</p>
             <p class="meta">
               <span v-if="project.author">{{ project.author }}</span>
-              <span>{{ countText(project.downloads) }} 次下载</span>
-              <span class="expand">{{ expandedId === project.id ? "收起文件" : "选择文件" }}</span>
+              <span>{{ t("market.downloads", { n: countText(project.downloads) }) }}</span>
+              <span class="expand">{{ expandedId === project.id ? t("market.collapse") : t("market.expand") }}</span>
             </p>
           </div>
         </div>
 
         <div v-if="expandedId === project.id" class="files">
-          <p v-if="filesLoading" class="state">正在取文件列表…</p>
+          <p v-if="filesLoading" class="state">{{ t("market.filesLoading") }}</p>
           <p v-else-if="filesErr" class="state err">{{ filesErr }}</p>
           <div v-for="file in files" :key="file.url" class="file-row">
             <div class="file-main">
@@ -340,7 +347,7 @@ onUnmounted(() => {
               </p>
             </div>
             <button class="primary" :disabled="!!busyName" @click="install(file)">
-              {{ busyName === file.name ? "处理中…" : isModpack ? "下载并导入" : "安装到实例" }}
+              {{ busyName === file.name ? t("market.busy") : isModpack ? t("market.downloadImport") : t("market.installToInstance") }}
             </button>
           </div>
         </div>
@@ -348,12 +355,11 @@ onUnmounted(() => {
     </div>
 
     <div v-if="hasMore" class="more">
-      <button :disabled="loading" @click="loadMore">{{ loading ? "加载中…" : "加载更多" }}</button>
+      <button :disabled="loading" @click="loadMore">{{ loading ? t("market.loadingMore") : t("market.loadMore") }}</button>
     </div>
 
     <p class="foot">
-      下载均带完整性校验，本地已有会跳过。模组进实例的 <code>mods/</code>，资源包进
-      <code>resourcepacks/</code>，光影进 <code>shaderpacks/</code>，各实例互不干扰。
+      {{ t("market.footerA") }}<code>mods/</code>{{ t("market.footerB") }}<code>resourcepacks/</code>{{ t("market.footerC") }}<code>shaderpacks/</code>{{ t("market.footerD") }}
     </p>
   </div>
 </template>

@@ -7,19 +7,28 @@ import DownloadView from "./views/DownloadView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import SmoothCursor from "./components/ui/smooth-cursor/SmoothCursor.vue";
 import SleekLineCursor from "./components/ui/sleek-line-cursor/SleekLineCursor.vue";
+import { useI18n } from "vue-i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   api,
   errText,
-  STAGE_TEXT,
+  stageText,
   type Account,
   type GameInstance,
   type InstallProgress,
+  type LauncherConfig,
 } from "./api";
+import { SUPPORTED_LOCALES, normalizeLocale, setLocale, type Locale } from "./i18n";
 
 type ViewKey = "home" | "download" | "account" | "settings";
 
+const { t: tr } = useI18n();
+
 const active = ref<ViewKey>("home");
+const booted = ref(false);
+const onboardOpen = ref(false);
+const onboardSaving = ref(false);
+const cfgCache = ref<LauncherConfig | null>(null);
 const instances = ref<GameInstance[]>([]);
 const account = ref<Account | null>(null);
 const busy = ref(false);
@@ -58,7 +67,7 @@ const taskPercent = computed(() => {
 const taskStage = computed(() => {
   const t = task.value;
   if (!t) return "";
-  const label = STAGE_TEXT[t.stage] ?? t.stage;
+  const label = stageText(t.stage);
   return t.total > 0 ? `${label} ${t.done}/${t.total}` : label;
 });
 
@@ -105,7 +114,7 @@ async function createInstance(payload: { name: string; version: string }) {
   busy.value = true;
   try {
     await api.createInstance(payload.name, payload.version);
-    notify(`实例「${payload.name}」已创建`);
+    notify(tr("app.instanceCreated", { name: payload.name }));
     await loadInstances();
   } catch (err) {
     notify(errText(err), "err");
@@ -120,7 +129,7 @@ async function importLocalVersions() {
   try {
     const added = await api.importLocalVersions();
     if (added.length === 0) {
-      notify("没有发现可导入的版本", "err");
+      notify(tr("app.noImportable"), "err");
       return;
     }
     // 只登记版本不搬文件的话启动出来是纯净原版，这里把搬了多少 mod 说清楚
@@ -128,9 +137,8 @@ async function importLocalVersions() {
     const mods = added.reduce((sum, item) => sum + item.mods, 0);
     const filled = added.filter((item) => item.reused).length;
     notify(
-      `处理了 ${added.length} 个版本，搬入 ${files} 个文件（mods ${mods} 个）${
-        filled > 0 ? `，其中 ${filled} 个是补齐已有实例` : ""
-      }`
+      tr("app.importedMany", { added: added.length, files, mods }) +
+        (filled > 0 ? tr("app.importedManyFilled", { filled }) : ""),
     );
     await loadInstances();
   } catch (err) {
@@ -144,14 +152,16 @@ async function importModpack(path: string) {
   if (busy.value) return;
   const label = path.split(/[\\/]/).pop() ?? path;
   busy.value = true;
-  notify(`正在导入 ${label}…`);
+  notify(tr("app.importing", { label }));
   try {
     const report = await api.importModpack(path);
     const warn = report.warnings[0];
     notify(
-      `已导入「${report.instance.name}」（${report.kind} 格式 · ${report.files} 个文件）${
-        warn ? `，${warn}` : ""
-      }`
+      tr("app.importedPack", {
+        name: report.instance.name,
+        kind: report.kind,
+        files: report.files,
+      }) + (warn ? tr("app.importedPackWarn", { warn }) : ""),
     );
     active.value = "home";
     await loadInstances();
@@ -165,12 +175,13 @@ async function importModpack(path: string) {
 async function syncInstanceFiles(item: GameInstance) {
   if (busy.value) return;
   busy.value = true;
-  notify(`正在把「${item.name}」版本目录里的文件补进实例…`);
+  notify(tr("app.syncingFiles", { name: item.name }));
   try {
     const report = await api.syncInstanceFiles(item.id);
     const warn = report.warnings[0];
     notify(
-      `已补 ${report.files} 个文件（其中 mods ${report.mods} 个）${warn ? `，${warn}` : ""}`
+      tr("app.syncedFiles", { files: report.files, mods: report.mods }) +
+        (warn ? tr("app.syncedFilesWarn", { warn }) : ""),
     );
     await loadInstances();
   } catch (err) {
@@ -183,12 +194,19 @@ async function syncInstanceFiles(item: GameInstance) {
 async function fetchPendingMods(item: GameInstance) {
   if (busy.value) return;
   busy.value = true;
-  notify(`正在补齐「${item.name}」的 mods…`);
+  notify(tr("app.fetchingMods", { name: item.name }));
   try {
     const report = await api.downloadPendingMods(item.id);
-    const summary = `下载 ${report.downloaded} 个 · 已有 ${report.skipped} 个 · 未完成 ${report.failed} 个`;
+    const summary = tr("app.modsSummary", {
+      downloaded: report.downloaded,
+      skipped: report.skipped,
+      failed: report.failed,
+    });
     const detail = report.messages[0];
-    notify(report.failed > 0 ? `${summary}，${detail ?? "看看清单"}` : summary, report.failed > 0 ? "err" : "ok");
+    const tail = report.failed > 0
+      ? tr("app.summaryDetail", { detail: detail ?? tr("app.checkManifest") })
+      : "";
+    notify(summary + tail, report.failed > 0 ? "err" : "ok");
   } catch (err) {
     notify(errText(err), "err");
   } finally {
@@ -199,16 +217,17 @@ async function fetchPendingMods(item: GameInstance) {
 async function verifyInstance(item: GameInstance) {
   if (busy.value) return;
   busy.value = true;
-  notify(`正在校验「${item.name}」…`);
+  notify(tr("app.verifying", { name: item.name }));
   try {
     const report = await api.verifyInstance(item.id);
-    const parts = [`核对 ${report.checked} 个 · 正常 ${report.ok} 个`];
-    if (report.missing.length > 0) parts.push(`缺 ${report.missing.length} 个`);
-    if (report.broken.length > 0) parts.push(`损坏 ${report.broken.length} 个`);
-    if (report.unverified.length > 0) parts.push(`没写校验值 ${report.unverified.length} 个`);
+    const parts = [tr("app.verifyChecked", { checked: report.checked, ok: report.ok })];
+    if (report.missing.length > 0) parts.push(tr("app.verifyMissing", { n: report.missing.length }));
+    if (report.broken.length > 0) parts.push(tr("app.verifyBroken", { n: report.broken.length }));
+    if (report.unverified.length > 0) parts.push(tr("app.verifyUnverified", { n: report.unverified.length }));
     const first = report.missing[0] ?? report.broken[0];
     const bad = report.missing.length + report.broken.length > 0;
-    notify(first ? `${parts.join(" · ")}，比如 ${first}` : parts.join(" · "), bad ? "err" : "ok");
+    const joined = parts.join(" · ");
+    notify(first ? tr("app.verifyExample", { summary: joined, path: first }) : joined, bad ? "err" : "ok");
   } catch (err) {
     notify(errText(err), "err");
   } finally {
@@ -219,12 +238,17 @@ async function verifyInstance(item: GameInstance) {
 async function installLoader(payload: { item: GameInstance; spec: string }) {
   if (busy.value) return;
   busy.value = true;
-  notify(`正在给「${payload.item.name}」装 ${payload.spec}…`);
+  notify(tr("app.installingLoader", { name: payload.item.name, spec: payload.spec }));
   try {
     const report = await api.installInstanceLoader(payload.item.id, payload.spec, null, null, null);
-    const head = `${report.loader} ${report.loader_version} 装好了 · 新下 ${report.downloaded} 个 · 复用 ${report.skipped} 个`;
+    const head = tr("app.loaderDone", {
+      loader: report.loader,
+      version: report.loader_version,
+      downloaded: report.downloaded,
+      skipped: report.skipped,
+    });
     const detail = report.messages[0];
-    notify(detail ? `${head}，${detail}` : head, "ok");
+    notify(detail ? tr("app.loaderDoneDetail", { head, detail }) : head, "ok");
     await loadInstances();
   } catch (err) {
     notify(errText(err), "err");
@@ -238,7 +262,7 @@ async function removeInstance(item: GameInstance) {
   busy.value = true;
   try {
     await api.deleteInstance(item.id);
-    notify(`实例「${item.name}」已删除`);
+    notify(tr("app.instanceDeleted", { name: item.name }));
     await loadInstances();
   } catch (err) {
     notify(errText(err), "err");
@@ -254,7 +278,7 @@ async function launchInstance(item: GameInstance) {
     const outcome = await api.launchInstance(item.id);
     runningPids.value = { ...runningPids.value, [item.id]: outcome.pid };
     const bits = [
-      `${item.name} 已启动（PID ${outcome.pid}）`,
+      tr("app.launched", { name: item.name, pid: outcome.pid }),
       outcome.java_note ?? "",
       ...(outcome.prepare_notes ?? []),
     ].filter((part) => part.length > 0);
@@ -314,7 +338,7 @@ async function killGame(item: GameInstance) {
   if (!pid) return;
   try {
     await api.killGameProcess(pid);
-    notify(`已结束「${item.name}」（PID ${pid}）`);
+    notify(tr("app.killed", { name: item.name, pid }));
   } catch (err) {
     notify(errText(err), "err");
   }
@@ -324,12 +348,50 @@ function onAccountChanged(next: Account | null) {
   account.value = next;
 }
 
+async function initLanguage() {
+  try {
+    const cfg = await api.getConfig();
+    cfgCache.value = cfg;
+    const saved = normalizeLocale(cfg.language);
+    if (saved) {
+      setLocale(saved);
+      return;
+    }
+    onboardOpen.value = true;
+  } catch (err) {
+    notify(errText(err), "err");
+    onboardOpen.value = true;
+  } finally {
+    booted.value = true;
+  }
+}
+
+async function pickLanguage(locale: Locale) {
+  if (onboardSaving.value) return;
+  onboardSaving.value = true;
+  const previous = normalizeLocale(cfgCache.value?.language);
+  setLocale(locale);
+  try {
+    const base = cfgCache.value ?? (await api.getConfig());
+    const next: LauncherConfig = { ...base, language: locale };
+    await api.saveConfig(next);
+    cfgCache.value = next;
+    onboardOpen.value = false;
+  } catch (err) {
+    if (previous) setLocale(previous);
+    notify(tr("language.failed", { reason: errText(err) }), "err");
+  } finally {
+    onboardSaving.value = false;
+  }
+}
+
 // 兜底：任何时候切回「我的实例」，都拉一次最新列表，避免外部新建的实例看不到。
 watch(active, (next) => {
   if (next === "home") void loadInstances();
 });
 
 onMounted(async () => {
+  void initLanguage();
   await Promise.all([loadInstances(), loadAccount()]);
   try {
     unlistenDrop = await getCurrentWebview().onDragDropEvent((event) => {
@@ -348,13 +410,13 @@ onMounted(async () => {
       const dir = payload.paths.find((item) => !/\.[a-z0-9]{1,6}$/i.test(item));
       const target = zip ?? dir ?? payload.paths[0];
       if (!target) {
-        notify("没拿到拖进来的路径，改用「导入本机已装版本」", "err");
+        notify(tr("app.dropNoPath"), "err");
         return;
       }
       void importModpack(target);
     });
   } catch (err) {
-    notify(`拖拽通道没起来：${errText(err)}，先用「导入本机已装版本」`, "err");
+    notify(tr("app.dropFail", { reason: errText(err) }), "err");
   }
   unlistenProgress = await api.onInstallProgress(showTask);
   unlistenLoader = await api.onLoaderProgress(showTask);
@@ -365,10 +427,10 @@ onMounted(async () => {
     );
     const item = hit ? instances.value.find((it) => it.id === hit[0]) : undefined;
     if (!item) {
-      notify(`游戏进程已退出（PID ${pid}）`);
+      notify(tr("app.gameExited", { pid }));
       return;
     }
-    notify(`「${item.name}」已退出，日志在下面`);
+    notify(tr("app.exitedLog", { name: item.name }));
     // 退出时直接把这一局的日志摊开：崩没崩一眼就有答案
     void showLog(item);
   });
@@ -385,14 +447,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div v-if="!booted" class="boot-veil" />
+  <div v-else class="app-shell">
     <SleekLineCursor :trails="22" :size="46" :friction="0.52" />
     <SmoothCursor />
     <SideNav :active="active" :account="account" @navigate="active = $event" />
     <div v-if="dropActive" class="drop-veil">
       <div class="drop-card">
-        <strong>松手就导入</strong>
-        <span>整合包 zip，或者 versions 下某个版本文件夹，都能认</span>
+        <strong>{{ tr("drop.title") }}</strong>
+        <span>{{ tr("drop.hint") }}</span>
       </div>
     </div>
 
@@ -430,13 +493,35 @@ onUnmounted(() => {
     <SettingsView v-else @notify="notify" />
     </Transition>
 
+    <Transition name="lang-fade">
+      <div v-if="onboardOpen" class="lang-mask">
+        <div class="lang-card">
+          <span class="lang-kicker">{{ tr("language.kicker") }}</span>
+          <h2>{{ tr("language.welcomeTitle") }}</h2>
+          <p>{{ tr("language.welcomeSubtitle") }}</p>
+          <div class="lang-options">
+            <button
+              v-for="item in SUPPORTED_LOCALES"
+              :key="item.value"
+              :disabled="onboardSaving"
+              @click="pickLanguage(item.value)"
+            >
+              <strong>{{ item.label }}</strong>
+              <em>{{ item.value }}</em>
+            </button>
+          </div>
+          <small>{{ tr("language.footer") }}</small>
+        </div>
+      </div>
+    </Transition>
+
     <Transition name="toast">
       <div v-if="logPanel" class="modal-mask" @click.self="closeLog">
         <div class="log-modal">
           <header>
             <span class="log-dot" />
             <strong>{{ logPanel.title }}</strong>
-            <button class="log-close" @click="closeLog">关闭</button>
+            <button class="log-close" @click="closeLog">{{ tr("common.close") }}</button>
           </header>
           <pre>{{ logPanel.text }}</pre>
         </div>
@@ -667,4 +752,114 @@ onUnmounted(() => {
   font-size: 12.5px;
   color: var(--text-dim);
 }
+/* 语言选择弹窗：首启必须挡住主界面，避免用户在看不懂的语言里瞎点 */
+.boot-veil {
+  position: fixed;
+  inset: 0;
+  background: #080c12;
+}
+
+.lang-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 20%, rgba(0, 149, 255, 0.14), transparent 60%),
+    rgba(6, 9, 14, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.lang-card {
+  width: min(430px, 84vw);
+  padding: 30px 30px 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(126, 160, 199, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.01) 100%),
+    rgba(11, 16, 24, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 40px 90px -50px rgba(0, 0, 0, 0.95);
+  text-align: center;
+}
+
+.lang-kicker {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(0, 149, 255, 0.85);
+}
+
+.lang-card h2 {
+  margin: 10px 0 8px;
+  font-size: 21px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.lang-card p {
+  margin: 0 0 20px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: rgba(160, 182, 205, 0.8);
+}
+
+.lang-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.lang-options button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+  padding: 16px 12px;
+  border-radius: 13px;
+  border: 1px solid rgba(126, 160, 199, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background 0.22s ease;
+}
+
+.lang-options button:hover:not(:disabled) {
+  border-color: rgba(0, 149, 255, 0.45);
+  background: rgba(0, 149, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.lang-options button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.lang-options strong {
+  font-size: 13.5px;
+  font-weight: 660;
+}
+
+.lang-options em {
+  font-style: normal;
+  font-size: 11px;
+  color: rgba(160, 182, 205, 0.6);
+}
+
+.lang-card small {
+  display: block;
+  margin-top: 18px;
+  font-size: 11px;
+  color: rgba(160, 182, 205, 0.55);
+}
+
+.lang-fade-enter-active,
+.lang-fade-leave-active {
+  transition: opacity 0.28s ease;
+}
+
+.lang-fade-enter-from,
+.lang-fade-leave-to {
+  opacity: 0;
+}
+
 </style>

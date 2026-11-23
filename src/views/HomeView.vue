@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import CardSpotlight from "@/components/ui/card-spotlight/CardSpotlight.vue";
 import NumberTicker from "@/components/ui/number-ticker/NumberTicker.vue";
 import BlurReveal from "@/components/ui/blur-reveal/BlurReveal.vue";
@@ -8,6 +9,8 @@ import InteractiveHoverButton from "@/components/ui/interactive-hover-button/Int
 import ParticlesBg from "@/components/ui/particles-bg/ParticlesBg.vue";
 import InstanceBgPanel from "@/components/ui/instance-bg/InstanceBgPanel.vue";
 import type { GameInstance } from "../api";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   instances: GameInstance[];
@@ -124,7 +127,7 @@ function persistBg() {
     bgSaveError.value = "";
   } catch (err) {
     // 基本都是撞了 localStorage 5MB 上限，说清楚别让用户以为已经存住了
-    bgSaveError.value = "本地存储已满，这张背景可能没存住，换张小点的图试试";
+    bgSaveError.value = t("home.bgStoreFull");
     console.warn("[instance-bg] 写入本地存储失败", err);
   }
 }
@@ -290,26 +293,26 @@ function submit() {
       <div>
         <h1>
           <BlurReveal :delay="0.06" :duration="0.6">
-            <span>{{ hero ? "实例详情" : "我的实例" }}</span>
+            <span>{{ hero ? t("home.detailTitle") : t("home.listTitle") }}</span>
           </BlurReveal>
         </h1>
-        <p v-if="hero">版本 {{ hero.version }}</p>
+        <p v-if="hero">{{ t("home.versionLabel", { version: hero.version }) }}</p>
         <p v-else>
-          共
+          {{ t("home.countPrefix") }}
           <NumberTicker
             class="count-ticker"
             :value="instances.length"
             :duration="900"
             :decimal-places="0"
           />
-          个实例<span v-if="instances.length > 0">，点一个进去</span>
+          {{ t("home.countSuffix") }}<span v-if="instances.length > 0">{{ t("home.countTail") }}</span>
         </p>
       </div>
       <div class="head-actions">
-        <button v-if="hero" @click="backToList">返回列表</button>
+        <button v-if="hero" @click="backToList">{{ t("home.backToList") }}</button>
         <template v-else>
-          <input v-if="instances.length > 5" v-model="query" class="search" placeholder="搜索实例…" />
-          <button @click="openCreate">新建实例</button>
+          <input v-if="instances.length > 5" v-model="query" class="search" :placeholder="t('home.searchPlaceholder')" />
+          <button @click="openCreate">{{ t("home.create") }}</button>
         </template>
       </div>
     </header>
@@ -318,57 +321,55 @@ function submit() {
       <div class="detail panel">
         <div class="detail-main">
           <span class="tag" :class="{ muted: !hasAccount }">
-            {{ heroPid ? `运行中 · PID ${heroPid}` : hasAccount ? "准备就绪" : "未登录 · 需绑定微软账号" }}
+            {{ heroPid ? t("home.runningWithPid", { pid: heroPid }) : hasAccount ? t("home.ready") : t("home.needAccount") }}
           </span>
           <h2 :title="hero.name">{{ hero.name }}</h2>
           <div class="detail-meta">
             <span class="chip">{{ hero.version }}</span>
-            <span class="chip muted">独立游戏目录</span>
+            <span class="chip muted">{{ t("home.isolatedDir") }}</span>
           </div>
           <details class="path-box">
-            <summary>游戏目录</summary>
+            <summary>{{ t("home.gameDir") }}</summary>
             <code>{{ hero.game_dir }}</code>
           </details>
           <div class="hero-actions">
-            <button v-if="!hasAccount" class="primary play-big" @click="emit('open-account')">
-              登录微软账号
-            </button>
+            <button v-if="!hasAccount" class="primary play-big" @click="emit('open-account')">{{ t("home.loginMs") }}</button>
             <button
               v-else
               class="primary play-big"
               :disabled="busy || launchingId === hero.id"
-              title="用当前账号启动这个实例"
+              :title="t('home.launchTitle')"
               @click="emit('launch', hero)"
             >
-              {{ launchingId === hero.id ? "启动中…" : heroPid ? "再开一个" : "启动游戏" }}
+              {{ launchingId === hero.id ? t("home.launching") : heroPid ? t("home.launchAgain") : t("home.launch") }}
             </button>
-            <button v-if="heroPid" class="ghost-danger" @click="emit('kill', hero)">结束进程</button>
+            <button v-if="heroPid" class="ghost-danger" @click="emit('kill', hero)">{{ t("home.kill") }}</button>
             <details class="adv">
-              <summary>更多</summary>
+              <summary>{{ t("home.more") }}</summary>
               <div class="adv-body">
-                <button :disabled="busy" title="按清单补齐 CurseForge / Modrinth 的 mods"
+                <button :disabled="busy" :title="t('home.fetchModsTitle')"
                   @click="emit('fetch-mods', hero)">
-                  补齐 mods
+                  {{ t("home.fetchMods") }}
                 </button>
                 <input
                   v-model="loaderSpec"
                   :disabled="busy"
-                  placeholder="加载器，如 forge-47.2.0"
-                  title="写加载器名字就行，带版本更准；想装别的版本就自己填"
+                  :placeholder="t('home.loaderPlaceholder')"
+                  :title="t('home.loaderTitle')"
                 />
                 <button :disabled="busy || loaderSpec.trim().length === 0"
-                  title="下载并安装 Forge / NeoForge / Fabric / Quilt"
+                  :title="t('home.installLoaderTitle')"
                   @click="emit('install-loader', { item: hero, spec: loaderSpec.trim() })">
-                  装加载器
+                  {{ t("home.installLoader") }}
                 </button>
                 <button :disabled="busy"
-                  title="版本隔离的整合包把 mods / config / 存档放在 versions/<版本>/ 里，点这里把这些文件补进实例"
+                  :title="t('home.syncTitle')"
                   @click="emit('sync-files', hero)">
-                  补本机文件
+                  {{ t("home.syncFiles") }}
                 </button>
-                <button :disabled="busy" title="按版本 json 里的 sha1 核对 client jar 和依赖库"
+                <button :disabled="busy" :title="t('home.verifyTitle')"
                   @click="emit('verify', hero)">
-                  校验文件
+                  {{ t("home.verify") }}
                 </button>
               </div>
             </details>
@@ -376,12 +377,12 @@ function submit() {
         </div>
         <div class="detail-side">
           <template v-if="pendingDelete === hero.id">
-            <p class="danger-hint">实例目录会连同 mods、存档一起删掉。</p>
-            <button class="ghost-danger" :disabled="busy" @click="emit('remove', hero)">确认删除</button>
-            <button :disabled="busy" @click="pendingDelete = null">取消</button>
+            <p class="danger-hint">{{ t("home.deleteWarn") }}</p>
+            <button class="ghost-danger" :disabled="busy" @click="emit('remove', hero)">{{ t("home.confirmDelete") }}</button>
+            <button :disabled="busy" @click="pendingDelete = null">{{ t("common.cancel") }}</button>
           </template>
           <button v-else class="ghost-danger del" :disabled="busy" @click="pendingDelete = hero.id">
-            删除实例
+            {{ t("home.deleteInstance") }}
           </button>
         </div>
       </div>
@@ -390,7 +391,7 @@ function submit() {
     <template v-else>
       <div v-if="instances.length === 0" class="hero panel">
         <div class="hero-stage">
-          <span class="hero-badge">未创建</span>
+          <span class="hero-badge">{{ t("home.notCreated") }}</span>
           <div class="orb" aria-hidden="true">
             <span class="orb-ring r1" />
             <span class="orb-ring r2" />
@@ -398,31 +399,27 @@ function submit() {
           </div>
         </div>
         <div class="hero-info">
-          <span class="tag muted">{{ hasAccount ? "第一步" : "未登录 · 需绑定微软账号" }}</span>
-          <h2>{{ hasAccount ? "还没有游戏实例" : "先绑定微软账号" }}</h2>
+          <span class="tag muted">{{ hasAccount ? t("home.stepOne") : t("home.needAccount") }}</span>
+          <h2>{{ hasAccount ? t("home.emptyTitle") : t("home.needAccountTitle") }}</h2>
           <p class="hero-meta">
             {{
               hasAccount
-                ? "新建一个实例，或导入本机已装版本；整合包 zip 直接拖进窗口也能导入。"
-                : "正版登录后才能启动游戏；登录完可以导入本机已装版本，或新建实例。"
+                ? t("home.emptyHint")
+                : t("home.needAccountHint")
             }}
           </p>
           <div class="hero-actions">
-            <button v-if="!hasAccount" class="primary play-big" @click="emit('open-account')">
-              登录微软账号
-            </button>
-            <button v-else class="primary play-big" @click="emit('import-local')">
-              导入本机已装版本
-            </button>
-            <button v-if="hasAccount" @click="openCreate">新建实例</button>
-            <button v-else @click="emit('import-local')">导入本机已装版本</button>
+            <button v-if="!hasAccount" class="primary play-big" @click="emit('open-account')">{{ t("home.loginMs") }}</button>
+            <button v-else class="primary play-big" @click="emit('import-local')">{{ t("home.importLocal") }}</button>
+            <button v-if="hasAccount" @click="openCreate">{{ t("home.create") }}</button>
+            <button v-else @click="emit('import-local')">{{ t("home.importLocal") }}</button>
           </div>
         </div>
       </div>
 
       <div v-else-if="filtered.length === 0" class="empty-state panel">
-        <h2>没有匹配的实例</h2>
-        <p>换个关键词试试。</p>
+        <h2>{{ t("home.noMatchTitle") }}</h2>
+        <p>{{ t("home.noMatchHint") }}</p>
       </div>
 
       <ul v-else class="tile-grid">
@@ -458,13 +455,13 @@ function submit() {
               <span class="tile-ver">{{ item.version }}</span>
               <span class="tile-top">
                 <span class="dot" :class="{ running: !!runningPids[item.id] }" />
-                <span class="tile-flag">{{ runningPids[item.id] ? "运行中" : "就绪" }}</span>
+                <span class="tile-flag">{{ runningPids[item.id] ? t("home.running") : t("home.readyTag") }}</span>
               </span>
               <span class="tile-name" :title="item.name">{{ item.name }}</span>
               <span class="tile-foot">
                 <InteractiveHoverButton
                   class="tile-cta"
-                  :text="runningPids[item.id] ? '运行中' : '进入实例'"
+                  :text="runningPids[item.id] ? t('home.running') : t('home.enter')"
                   @click.stop="enter(item)"
                 />
               </span>
@@ -475,7 +472,7 @@ function submit() {
             type="button"
             class="tile-bg-btn"
             :class="{ 'is-on': hasBg(item.id), 'is-active': bgEditor?.id === item.id }"
-            :title="hasBg(item.id) ? '调整卡片背景' : '设置卡片背景'"
+            :title="hasBg(item.id) ? t('home.adjustBg') : t('home.setBg')"
             @click.stop="toggleBgEditor($event, item)"
           >
             <svg
@@ -509,8 +506,8 @@ function submit() {
               :duration="7"
             />
             <span class="tile-plus">+</span>
-            <span class="tile-name">新建实例</span>
-            <span class="tile-foot"><span class="tile-enter">选个版本开工</span></span>
+            <span class="tile-name">{{ t("home.create") }}</span>
+            <span class="tile-foot"><span class="tile-enter">{{ t("home.createHint") }}</span></span>
           </button>
         </li>
       </ul>
@@ -525,28 +522,26 @@ function submit() {
         @close="closeBgEditor"
       />
       <p v-if="instances.length > 0" class="drop-hint">
-        导入整合包：把 zip 拖进窗口就行，PCL / HMCL 的结构都能认。
+        {{ t("home.dragHint") }}
       </p>
     </template>
 
     <Transition name="toast">
       <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
         <div class="modal">
-          <h2>新建实例</h2>
-          <p class="modal-sub">实例名用英文或中文都行，版本号决定后面能装什么整合包。</p>
+          <h2>{{ t("home.create") }}</h2>
+          <p class="modal-sub">{{ t("home.createSub") }}</p>
           <label>
-            <span>实例名称</span>
-            <input v-model="name" autofocus placeholder="例如：生电 1.20.1" @keyup.enter="submit" />
+            <span>{{ t("home.nameLabel") }}</span>
+            <input v-model="name" autofocus :placeholder="t('home.namePlaceholder')" @keyup.enter="submit" />
           </label>
           <label>
-            <span>游戏版本</span>
-            <input v-model="version" placeholder="例如：1.20.1" @keyup.enter="submit" />
+            <span>{{ t("home.versionField") }}</span>
+            <input v-model="version" :placeholder="t('home.versionPlaceholder')" @keyup.enter="submit" />
           </label>
           <div class="modal-actions">
-            <button @click="showCreate = false">取消</button>
-            <button class="primary" :disabled="busy || !name.trim() || !version.trim()" @click="submit">
-              创建
-            </button>
+            <button @click="showCreate = false">{{ t("common.cancel") }}</button>
+            <button class="primary" :disabled="busy || !name.trim() || !version.trim()" @click="submit">{{ t("home.confirmCreate") }}</button>
           </div>
         </div>
       </div>
