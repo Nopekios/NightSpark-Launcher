@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
-/// 启动器配置。
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LauncherConfig {
     /// Java 可执行文件路径，None 表示由启动器自动探测
@@ -29,14 +28,12 @@ impl Default for LauncherConfig {
     }
 }
 
-/// 探测到的 Java 运行时。
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JavaInfo {
     pub path: String,
     pub version: String,
 }
 
-/// 当前平台的 java 可执行文件名。
 fn java_exe_name() -> &'static str {
     if cfg!(windows) {
         "java.exe"
@@ -61,7 +58,6 @@ pub fn minecraft_dir() -> Result<PathBuf, AppError> {
     Ok(data_dir.join(".minecraft"))
 }
 
-/// 当前启动器在系统配置目录下的文件夹名。
 const CURRENT_DIR_NAME: &str = "NightSpark";
 /// 项目改名前旧版启动器的文件夹名（`%APPDATA%\Love-Launcher`）。
 const LEGACY_DIR_NAME: &str = "Love-Launcher";
@@ -90,30 +86,23 @@ fn env_override(key: &str) -> Option<PathBuf> {
     }
 }
 
-/// 当前配置目录 `config_dir/NightSpark`；只解析路径，不创建。
 fn current_home_dir() -> Result<PathBuf, AppError> {
     let config_dir = dirs::config_dir()
         .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
     Ok(config_dir.join(CURRENT_DIR_NAME))
 }
 
-/// 旧版配置目录 `config_dir/Love-Launcher`；只解析路径，不创建。
 fn legacy_home_dir() -> Result<PathBuf, AppError> {
     let config_dir = dirs::config_dir()
         .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
     Ok(config_dir.join(LEGACY_DIR_NAME))
 }
 
-/// 旧配置目录一次性迁移的结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MigrationOutcome {
-    /// 无需迁移：设置了 NIGHTSPARK_HOME、旧目录不存在，或新目录已存在
     Skipped,
-    /// 通过目录改名完成，旧目录已随改名消失
     Renamed,
-    /// 改名失败后改用复制完成，旧目录按保守策略保留
     Copied,
-    /// 迁移失败，旧目录保持原样
     Failed,
 }
 
@@ -253,7 +242,6 @@ pub fn load_config() -> Result<LauncherConfig, AppError> {
     Ok(cfg)
 }
 
-/// 保存启动器配置，自动创建父目录。
 pub fn save_config(cfg: &LauncherConfig) -> Result<(), AppError> {
     let path = launcher_config_path()?;
     if let Some(parent) = path.parent() {

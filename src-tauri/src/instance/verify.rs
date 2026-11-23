@@ -1,8 +1,5 @@
-//! 实例文件校验：拿版本 json 里写的 SHA-1，逐个核对 client jar 与 libraries。
-//!
-//! 启动器最怕的是文件只下了一半、被别的工具覆盖、或者磁盘出错，
-//! 表现成「一启动就崩」但报错指向别的地方。启动前把能核对的文件过一遍，
-//! 缺的、坏的直接列出来，比让用户猜有用得多。
+//! 实例文件校验：按版本 json 里的 SHA-1 核对 client jar 与 libraries。
+//! 启动前先过一遍，把缺的、坏的列出来，比让用户对着「一启动就崩」猜有用。
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -14,22 +11,15 @@ use crate::error::AppError;
 use crate::hash;
 use crate::instance;
 
-/// 校验结果。字段都是给人看的，前端直接铺开显示。
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct VerifyReport {
-    /// 真正比对过 SHA-1 的文件数
     pub checked: usize,
-    /// 对得上的文件数
     pub ok: usize,
-    /// 不见了文件（路径相对实例游戏目录）
     pub missing: Vec<String>,
-    /// 在但内容不对的文件
     pub broken: Vec<String>,
-    /// 清单里没写 SHA-1、只能确认存在的文件
     pub unverified: Vec<String>,
     /// 实例游戏目录里 mods 下的 jar 数（版本隔离的结构最容易在这里翻车）
     pub mods_jars: usize,
-    /// 过程中的提示，比如版本 json 读不出来
     pub notes: Vec<String>,
 }
 
@@ -100,7 +90,6 @@ pub fn verify_instance(instance_id: &str) -> Result<VerifyReport, AppError> {
     Ok(report)
 }
 
-/// 数一个目录下有多少 jar（不递归，mods 目录就是平铺的）。
 pub(crate) fn count_jars(dir: &Path) -> usize {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;

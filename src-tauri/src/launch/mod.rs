@@ -12,7 +12,6 @@ use crate::download::{self, ArgValue, VersionMeta};
 use crate::error::AppError;
 use crate::instance::Instance;
 
-/// 一次启动使用的参数配置。
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LaunchConfig {
     pub java_path: String,
@@ -34,7 +33,6 @@ impl Default for LaunchConfig {
     }
 }
 
-/// 启动结果。
 #[derive(Debug, Clone, Serialize)]
 pub struct LaunchOutcome {
     pub pid: u32,
@@ -47,12 +45,10 @@ pub struct LaunchOutcome {
     /// 自动切换 Java 时给出的说明，没切换就是 None。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub java_note: Option<String>,
-    /// 启动前自动补的东西，按顺序给界面提示用。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prepare_notes: Vec<String>,
 }
 
-/// 把一条参数（可能是条件参数）按平台规则展开进 `out`。
 fn push_arg(arg: &ArgValue, out: &mut Vec<String>, vars: &HashMap<&str, String>) {
     match arg {
         ArgValue::Plain(text) => out.push(download::substitute(text, vars)),
@@ -115,7 +111,6 @@ fn check_placeholders(args: &[String]) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 组装启动命令，返回「命令 + 脱敏摘要」。
 fn build_command(
     instance: &Instance,
     meta: &VersionMeta,
@@ -280,7 +275,6 @@ fn build_command(
     // 用户自定义参数放在最后，覆盖前面生成的值。
     jvm_args.extend(cfg.jvm_args.iter().filter(|s| !s.trim().is_empty()).cloned());
     game_args.extend(cfg.game_args.iter().filter(|s| !s.trim().is_empty()).cloned());
-    // ---- Forge / NeoForge 的 -DignoreList 修正 ----
     // 版本 json 里写的是 `-DignoreList=client-extra,${version_name}.jar`，其中的
     // ${version_name} 会被我们展开成加载器版本 id（如 neoforge-21.1.266），于是只
     // 忽略了加载器自己的 jar。可 classpath 上还有顺着 inheritsFrom 带上的原版 jar
@@ -416,7 +410,6 @@ pub fn launch(
         prepare_notes: Vec::new(),
     })
 }
-
 
 #[cfg(test)]
 mod live_tests {

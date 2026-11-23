@@ -1,10 +1,4 @@
-//! Java 运行时模块：按需下载 Mojang 官方 JRE。
-//!
-//! 低版本 MC（1.16.5 及以下）要 Java 8，1.17 要 16，1.18~1.20.4 要 17，
-//! 1.20.5+ 要 21。用户机器上通常只装了一个，缺的那个由这里按需补齐。
-//!
-//! 下载源用 Mojang 自己的 java-runtime 清单，跟游戏本体同源同 CDN，
-//! 组件划分正好覆盖 8 / 16 / 17 / 21 / 25 五个大版本。
+//! Java 运行时模块：按需下载 Mojang 官方 JRE，与游戏本体同源同 CDN。
 
 use std::path::PathBuf;
 
@@ -14,16 +8,12 @@ use serde_json::Value;
 use crate::download::{self, FileJob, ProgressFn};
 use crate::error::AppError;
 
-/// Mojang 官方 Java 运行时清单（所有平台、所有组件）。
 const RUNTIME_INDEX: &str =
     "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
-/// 装好之后回报给前端的信息。
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JavaRuntime {
-    /// 主版本号，如 8 / 17 / 21。
     pub major: u32,
-    /// java 可执行文件绝对路径。
     pub path: String,
     /// 官方清单里记录的版本名，如 `8u51-cacert462b08`。
     pub version: String,
@@ -64,7 +54,6 @@ pub fn runtimes_root() -> Result<PathBuf, AppError> {
     Ok(dir)
 }
 
-/// 某个 Java 主版本落地后所在的目录。
 pub fn runtime_dir(major: u32) -> Result<PathBuf, AppError> {
     Ok(runtimes_root()?.join(format!("java-{major}")))
 }
@@ -123,7 +112,6 @@ fn component_major(component: &str) -> u32 {
     }
 }
 
-/// 已装好的运行时目录里那个 java 可执行文件。
 pub fn exe_in(dir: &PathBuf) -> PathBuf {
     dir.join("bin").join(java_exe_name())
 }

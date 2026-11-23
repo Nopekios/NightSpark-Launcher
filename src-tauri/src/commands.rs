@@ -10,9 +10,7 @@ use tauri::{Emitter, Manager};
 
 // 登录窗口的 label；重复点登录时先关掉旧窗口。
 const MSA_LOGIN_WINDOW: &str = "msa-login";
-// 拿到授权码时发给前端的事件名。
 const MSA_CODE_EVENT: &str = "msa-code";
-// 授权失败时发给前端的事件名。
 const MSA_ERROR_EVENT: &str = "msa-error";
 // 登录链路进度事件，payload 是一句给用户看的阶段文案。
 const LOGIN_PROGRESS_EVENT: &str = "login-progress";
@@ -44,13 +42,11 @@ pub async fn delete_instance(id: String) -> Result<(), AppError> {
     instance::delete_instance(&id)
 }
 
-/// 把本机 `.minecraft\versions` 里已装好的版本登记为实例。
 #[tauri::command]
 pub async fn import_local_versions() -> Result<Vec<instance::ImportedInstance>, AppError> {
     instance::import_installed_versions()
 }
 
-/// 把实例绑定的版本目录里版本隔离出来的内容补进实例（mods/config/saves 等）。
 #[tauri::command]
 pub async fn sync_instance_files(instance_id: String) -> Result<instance::CarryReport, AppError> {
     instance::sync_instance_from_shared(&instance_id)
@@ -98,7 +94,6 @@ pub async fn download_pending_mods(
     instance::modpack::download_pending_reported(&instance_id, &sink).await
 }
 
-/// 给实例装加载器（Forge / NeoForge / Fabric / Quilt）。
 #[tauri::command]
 pub async fn install_instance_loader(
     app: tauri::AppHandle,
@@ -263,18 +258,12 @@ pub async fn logout() -> Result<(), AppError> {
     auth::clear_account()
 }
 
-// ---------------------------------------------------------------------------
-// 配置 / 版本下载 / 启动
-// ---------------------------------------------------------------------------
-
 use crate::download;
 use crate::java;
 use crate::launch;
 
-/// 版本安装进度事件名。
 const INSTALL_PROGRESS_EVENT: &str = "install-progress";
 
-/// 安装进度负载。
 #[derive(serde::Serialize, Clone)]
 pub struct InstallProgress {
     pub stage: String,
@@ -292,14 +281,12 @@ pub async fn save_config(cfg: config::LauncherConfig) -> Result<(), AppError> {
     config::save_config(&cfg)
 }
 
-/// 拉取可安装的版本清单。
 #[tauri::command]
 pub async fn fetch_version_list() -> Result<Vec<download::VersionEntry>, AppError> {
     let manifest = download::fetch_manifest().await?;
     Ok(manifest.versions)
 }
 
-/// 下载指定版本（client / libraries / natives，可选资源文件）。
 #[tauri::command]
 pub async fn install_version(
     app: tauri::AppHandle,
@@ -320,7 +307,6 @@ pub async fn install_version(
     download::install_version(&version, with_assets, &progress).await
 }
 
-/// 版本是否已经下载到本地。
 #[tauri::command]
 pub async fn is_version_installed(version: String) -> Result<bool, AppError> {
     Ok(download::is_installed(&version))
@@ -333,7 +319,6 @@ fn find_instance(id: &str) -> Result<instance::Instance, AppError> {
         .ok_or_else(|| AppError::NotFound(format!("找不到实例 {id}")))
 }
 
-/// 启动指定实例。
 #[tauri::command]
 pub async fn launch_instance(
     id: String,
@@ -434,7 +419,6 @@ fn resolve_java(preferred: &str, meta: &download::VersionMeta) -> (String, Optio
     (preferred.to_string(), None)
 }
 
-/// 下载安装 Mojang 官方 Java 运行时，进度走 install-progress 事件。
 #[tauri::command]
 pub async fn install_java(
     app: tauri::AppHandle,
@@ -460,7 +444,6 @@ pub async fn install_java(
     Ok(runtime)
 }
 
-/// 列出启动器自己下过的 Java 运行时。
 #[tauri::command]
 pub async fn list_java_runtimes() -> Result<Vec<java::JavaRuntime>, AppError> {
     Ok(java::installed())
@@ -517,7 +500,6 @@ async fn auto_prepare(
     let game_dir = std::path::PathBuf::from(&target.game_dir);
     let mods_now = instance::verify::count_jars(&game_dir.join("mods"));
 
-    // 1. 版本隔离的整合包：mods / config / 存档都在 versions/<版本>/ 里，得先搬进来
     if mods_now == 0 {
         if let Ok(version_dir) = download::version_dir(&target.version) {
             if version_dir.is_dir() {
@@ -535,7 +517,6 @@ async fn auto_prepare(
         }
     }
 
-    // 2. 整合包留下的待下载清单，有直链的直接补齐
     let pending = game_dir.join(".nightspark").join("pending-mods.json");
     if pending.is_file() {
         match instance::modpack::download_pending_reported(&target.id, &sink).await {
@@ -551,7 +532,6 @@ async fn auto_prepare(
         }
     }
 
-    // 3. 版本文件（client jar + 依赖库）缺了自己下，官方版本才走这条路
     if !download::is_installed(&target.version) {
         sink("准备版本文件", 0, 1);
         match download::install_version(&target.version, true, &sink).await {
@@ -564,7 +544,6 @@ async fn auto_prepare(
         sink("准备版本文件", 1, 1);
     }
 
-    // 4. 整合包要求的加载器没装，启动出来就是纯原版，这里直接装上
     if let Some(loader) = pack_loader(&target.game_dir) {
         if !has_loader_in_name(&target.version) {
             let java = download::load_local_meta(&target.version)
@@ -610,7 +589,6 @@ fn has_loader_in_name(version: &str) -> bool {
     ["forge", "fabric", "quilt"].iter().any(|key| lower.contains(key))
 }
 
-/// 读取实例最新一次启动日志的尾部。
 #[tauri::command]
 pub async fn read_latest_log(id: String, max_lines: Option<usize>) -> Result<String, AppError> {
     let target = find_instance(&id)?;
@@ -638,7 +616,6 @@ pub async fn search_market(
     market::search(&source, &kind, &query, page).await
 }
 
-/// 列某个项目下的可下载文件，可按游戏版本与加载器筛。
 #[tauri::command]
 pub async fn list_market_files(
     source: String,
@@ -657,7 +634,6 @@ pub async fn list_market_files(
     .await
 }
 
-/// 把市场里的一个文件装进实例（模组 / 资源包 / 光影包）。
 #[tauri::command]
 pub async fn install_market_file(
     app: tauri::AppHandle,
@@ -673,7 +649,6 @@ pub async fn install_market_file(
     market::install_file(&instance_id, file, &sink).await
 }
 
-/// 下载市场里的整合包并导入成新实例。
 #[tauri::command]
 pub async fn install_market_modpack(
     app: tauri::AppHandle,

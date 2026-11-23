@@ -1,28 +1,19 @@
-//! 统一错误类型。
-//!
-//! 所有 Tauri command 统一返回 `Result<T, AppError>`，
-//! AppError 序列化为 `{ "code": "...", "message": "..." }` 交给前端。
+//! 统一错误类型：所有 Tauri command 返回 `Result<T, AppError>`，
+//! 序列化为 `{ "code": "...", "message": "..." }` 交给前端。
 
 use std::error::Error;
 use std::fmt;
 
-/// 应用统一错误。
 #[derive(Debug)]
 pub enum AppError {
-    /// 底层 I/O 错误
     Io(std::io::Error),
-    /// 网络 / HTTP 相关错误
     Http(String),
-    /// 配置读写 / 解析错误
     Config(String),
-    /// 目标资源不存在
     NotFound(String),
-    /// 内部逻辑错误
     Internal(String),
 }
 
 impl AppError {
-    /// 供序列化使用的固定短错误码。
     pub fn code(&self) -> &'static str {
         match self {
             AppError::Io(_) => "io",

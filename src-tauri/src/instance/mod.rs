@@ -14,23 +14,15 @@ pub mod loader;
 pub mod modpack;
 pub mod verify;
 
-/// 实例元数据文件名。
 const INSTANCE_FILE: &str = "instance.json";
-/// 生成实例 ID 时最多重试次数。
 const MAX_ID_RETRIES: u32 = 5;
-/// 实例内游戏目录名。
 const GAME_DIR_NAME: &str = ".minecraft";
 
-/// 一个游戏实例。
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Instance {
-    /// 实例唯一标识
     pub id: String,
-    /// 展示名称
     pub name: String,
-    /// 该实例的独立游戏目录
     pub game_dir: String,
-    /// 对应的游戏版本号
     pub version: String,
 }
 
@@ -76,7 +68,6 @@ fn short_suffix(seed: u64) -> String {
     format!("{:04x}", x & 0xffff)
 }
 
-/// 生成一个候选实例 id：`<slug>_<4 位十六进制>`。
 fn generate_id(name: &str, attempt: u32) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -99,7 +90,6 @@ fn read_instance(instance_dir: &Path) -> Result<Instance, AppError> {
         .map_err(|e| AppError::Config(format!("解析实例文件失败（{}）: {}", path.display(), e)))
 }
 
-/// 把实例元数据写进实例目录。
 fn write_instance(instance_dir: &Path, instance: &Instance) -> Result<(), AppError> {
     let json = serde_json::to_string_pretty(instance)
         .map_err(|e| AppError::Config(format!("序列化实例失败: {}", e)))?;
@@ -165,24 +155,17 @@ pub fn set_version(id: &str, version: &str) -> Result<Instance, AppError> {
     Ok(instance)
 }
 
-/// 版本隔离搬家的统计：搬了多少文件、其中多少个 mod。
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct CarryReport {
-    /// 真正落地到实例目录的文件数
     pub files: usize,
-    /// 其中 mods 目录下的 jar 数
     pub mods: usize,
-    /// 用硬链接落地的文件数（同盘零拷贝）
     pub linked: usize,
-    /// 退化成复制的文件数
     pub copied: usize,
-    /// 实例里已经有同路径文件、没动的文件数
     pub kept: usize,
     pub warnings: Vec<String>,
 }
 
-/// 版本隔离里不该搬的东西：版本本体（jar/json）和 natives 解压目录。
-/// 版本目录里哪些东西不该搬：版本自身的 jar/json、natives、日志和下载缓存。
+/// 版本目录里不该搬的：版本自身 jar/json、natives、日志与下载缓存。
 fn is_isolation_skip(name: &str, version: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     if name == format!("{version}.jar") || name == format!("{version}.json") {
@@ -300,17 +283,14 @@ pub fn sync_instance_from_shared(instance_id: &str) -> Result<CarryReport, AppEr
     carry_version_files(&game_dir, &version_dir, &instance.version, false)
 }
 
-/// 导入本机已装版本的结果：搬了多少文件、补了多少 mod，前端直接铺开显示。
 #[derive(Serialize, Clone, Debug)]
 pub struct ImportedInstance {
     pub instance: Instance,
     pub files: usize,
     pub mods: usize,
-    /// 实例本来就在、这次只是把版本隔离的内容补进去
     pub reused: bool,
 }
 
-/// 新建实例：生成唯一 id、建目录、写 instance.json。
 pub fn create_instance(name: &str, version: &str) -> Result<Instance, AppError> {
     let name = name.trim();
     if name.is_empty() {
@@ -346,7 +326,6 @@ pub fn create_instance(name: &str, version: &str) -> Result<Instance, AppError> 
     Ok(instance)
 }
 
-/// 删除实例。先确认存在，再整目录移除。
 pub fn delete_instance(id: &str) -> Result<(), AppError> {
     get_instance(id)?;
 
@@ -355,7 +334,6 @@ pub fn delete_instance(id: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 扫描共享游戏目录下已装好的版本 id（要求存在同名 json）。
 fn scan_installed_versions() -> Result<Vec<String>, AppError> {
     let versions_dir = crate::download::shared_root()?.join("versions");
     if !versions_dir.is_dir() {
@@ -458,14 +436,12 @@ mod tests {
         assert_eq!(created.name, name);
         assert_eq!(created.version, "1.20.1");
 
-        // 目录布局校验
         let dir = instances_root().unwrap().join(&created.id);
         assert!(dir.is_dir(), "实例目录未创建");
         assert!(dir.join(INSTANCE_FILE).is_file(), "instance.json 未写入");
         assert!(dir.join(GAME_DIR_NAME).is_dir(), ".minecraft 未创建");
         assert_eq!(created.game_dir, dir.join(GAME_DIR_NAME).to_string_lossy());
 
-        // list 能读到
         let all = list_instances().unwrap();
         println!("after create -> {} 条", all.len());
         for it in &all {
@@ -473,11 +449,9 @@ mod tests {
         }
         assert!(all.iter().any(|it| it.id == created.id));
 
-        // get 能取到
         let fetched = get_instance(&created.id).unwrap();
         assert_eq!(fetched.id, created.id);
 
-        // 删除
         delete_instance(&created.id).unwrap();
         let err = get_instance(&created.id).unwrap_err();
         assert!(matches!(err, AppError::NotFound(_)), "实际: {:?}", err);

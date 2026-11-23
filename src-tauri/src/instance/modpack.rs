@@ -26,13 +26,11 @@ pub struct ImportReport {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PendingMod {
-    /// 目标相对路径，例如 mods/xxx.jar
     pub path: String,
     /// 可直链下载时才有值（Modrinth 会给 cdn 链接，CurseForge 只给数字 ID）
     pub url: Option<String>,
     pub sha1: Option<String>,
     pub source: String,
-    /// 拿不到直链时告诉用户缺什么
     pub hint: Option<String>,
     /// CurseForge 的文件 ID：下载时拿它去查真名、直链和 SHA-1
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,7 +57,6 @@ pub fn import_modpack(path: &str) -> Result<ImportReport, AppError> {
     import_modpack_reported(path, &|_, _, _| {})
 }
 
-/// 带进度的导入：`progress(阶段, 已完成, 总数)` 会按「读取 → 解析 → 解压 → 收尾」上报。
 pub fn import_modpack_reported(
     path: &str,
     progress: crate::download::ProgressFn<'_>,
@@ -581,12 +578,10 @@ fn parse_mmc(
     })
 }
 
-
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct PendingReport {
     pub downloaded: usize,
     pub skipped: usize,
-    /// 失败总数（含可选项）
     pub failed: usize,
     /// 失败里属于整合包非必装项的数量：必装缺失才会导致进游戏报缺 mod
     pub optional_failed: usize,
@@ -613,7 +608,6 @@ pub async fn download_pending(instance_id: &str) -> Result<PendingReport, AppErr
     download_pending_reported(instance_id, &|_, _, _| {}).await
 }
 
-/// 带进度的补齐：查文件信息、下载两部分都会往 `progress` 上报。
 pub async fn download_pending_reported(
     instance_id: &str,
     progress: crate::download::ProgressFn<'_>,
@@ -646,7 +640,6 @@ pub async fn download_pending_reported(
     let mut report = PendingReport::default();
     let mut left: Vec<Value> = Vec::new();
 
-    // 1) 先把 CurseForge 的 fileID 攒起来一次性批量查，省得一个文件一次请求。
     let mut cf_ids: Vec<i64> = Vec::new();
     for item in &mods {
         if item.get("source").and_then(Value::as_str) != Some("curseforge") {
@@ -675,7 +668,6 @@ pub async fn download_pending_reported(
         progress("查询 CurseForge 文件信息", 1, 1);
     }
 
-    // 2) 组装下载作业：每个文件都可能带多个候选源（官方 + 镜像）。
     let mut planned: Vec<(Value, download::FileJob)> = Vec::new();
     for item in mods {
         let optional = item
@@ -774,7 +766,6 @@ pub async fn download_pending_reported(
         ));
     }
 
-    // 3) 并发下载；本地已有且哈希对得上的直接跳过。
     let (owners, jobs): (Vec<Value>, Vec<download::FileJob>) = planned.into_iter().unzip();
     let total = jobs.len() as u64;
     progress("下载缺失的 mod", 0, total);
@@ -800,7 +791,6 @@ pub async fn download_pending_reported(
         }
     }
 
-    // 4) 没搞定的回写，下次点「补齐」接着来。
     // 全部搞定就把清单删掉，别留个空清单让下次启动再空转一遍
     if left.is_empty() {
         let _ = std::fs::remove_file(&list_path);
@@ -821,7 +811,6 @@ pub async fn download_pending_reported(
         ));
     }
 
-    // 6) 落一份带时间戳的最近一次报告，事后对账不用翻日志。
     if let Err(err) = write_pending_report(&game_dir, &report) {
         report.messages.push(format!("补齐报告没能落盘：{err}"));
     }

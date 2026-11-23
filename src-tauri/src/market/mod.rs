@@ -1,11 +1,4 @@
 //! 资源市场：把 CurseForge 与 Modrinth 的「搜索 → 选文件 → 落盘」收敛成一套接口。
-//!
-//! 两条来源的脾气不一样：
-//! - Modrinth 完全开放，`api.modrinth.com/v2` 直接能搜能下，文件自带 `sha1` 与直链；
-//! - CurseForge 官方 API 要 `x-api-key`，没 key 走 `mod.mcimirror.top` 镜像即可，
-//!   文件直链是公开 CDN，按 `fileId` 拼得出来（规则见 [`net::curseforge_cdn_url`]）。
-//!
-//! 所以这里的顺序统一是「镜像优先、官方兜底」，任一来源挂掉都不至于整页空着。
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -20,26 +13,17 @@ use crate::net;
 
 /// CurseForge 里 Minecraft 的游戏 id。
 const CF_GAME_ID: u32 = 432;
-/// 一页多少条。
 const PAGE_SIZE: u32 = 20;
-/// Modrinth 官方接口。
 const MODRINTH_API: &str = "https://api.modrinth.com/v2";
 /// Modrinth 镜像（同 path 直接替换 host）。
 const MODRINTH_MIRROR: &str = "https://mod.mcimirror.top/modrinth";
 /// 单次请求超时（秒）。
 const HTTP_TIMEOUT_SECS: u64 = 30;
 
-// ---------------------------------------------------------------------------
-// 对外数据结构
-// ---------------------------------------------------------------------------
-
-/// 搜索列表里的一条项目。
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketProject {
-    /// `curseforge` 或 `modrinth`。
     pub source: String,
-    /// 项目 id，取文件列表时要用。
     pub id: String,
     pub slug: String,
     pub name: String,
@@ -51,13 +35,10 @@ pub struct MarketProject {
     pub kind: String,
 }
 
-/// 项目下的一个可下载文件。
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketFile {
-    /// 落盘用的文件名。
     pub name: String,
-    /// 版本展示名。
     pub version: String,
     pub game_versions: Vec<String>,
     pub loaders: Vec<String>,
@@ -68,7 +49,6 @@ pub struct MarketFile {
     pub folder: String,
 }
 
-/// 装完一个文件的结果。
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketInstallReport {
@@ -79,11 +59,6 @@ pub struct MarketInstallReport {
     pub skipped: bool,
 }
 
-// ---------------------------------------------------------------------------
-// 类型映射
-// ---------------------------------------------------------------------------
-
-/// 资源类型 → CurseForge `classId`。
 fn cf_class_id(kind: &str) -> u32 {
     match kind {
         "modpack" => 4471,
@@ -95,7 +70,6 @@ fn cf_class_id(kind: &str) -> u32 {
     }
 }
 
-/// 资源类型 → Modrinth `project_type`。
 fn mr_project_type(kind: &str) -> &'static str {
     match kind {
         "modpack" => "modpack",
@@ -106,7 +80,6 @@ fn mr_project_type(kind: &str) -> &'static str {
     }
 }
 
-/// 资源类型 → 实例内默认目录。
 fn default_folder(kind: &str) -> &'static str {
     match kind {
         "modpack" => "",
@@ -132,10 +105,6 @@ fn cf_loader_type(loader: &str) -> Option<u32> {
 
 /// CurseForge 文件里已知的加载器名，用来把 `gameVersions` 拆成「游戏版本 + 加载器」。
 const CF_LOADER_NAMES: [&str; 6] = ["Forge", "NeoForge", "Fabric", "Quilt", "LiteLoader", "Rift"];
-
-// ---------------------------------------------------------------------------
-// HTTP 小工具
-// ---------------------------------------------------------------------------
 
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
@@ -174,7 +143,6 @@ async fn get_json(
         .map_err(|err| AppError::Http(format!("{url} 返回的不是合法 JSON：{err}")))
 }
 
-/// 按顺序试一串候选地址，第一个成功的就用。
 async fn get_json_any(
     client: &reqwest::Client,
     targets: &[(String, bool)],
@@ -207,17 +175,12 @@ fn cf_targets(path: &str) -> Vec<(String, bool)> {
     mirrors
 }
 
-/// Modrinth 候选：官方在前，镜像兜底。
 fn modrinth_targets(path: &str) -> Vec<(String, bool)> {
     vec![
         (format!("{MODRINTH_API}{path}"), false),
         (format!("{MODRINTH_MIRROR}{path}"), false),
     ]
 }
-
-// ---------------------------------------------------------------------------
-// 搜索
-// ---------------------------------------------------------------------------
 
 /// 搜索项目：`source` 为 `curseforge` 或 `modrinth`，`kind` 为资源类型。
 pub async fn search(
@@ -341,10 +304,6 @@ fn parse_mr_project(item: &Value, kind: &str) -> Option<MarketProject> {
         kind: kind.to_string(),
     })
 }
-
-// ---------------------------------------------------------------------------
-// 文件列表
-// ---------------------------------------------------------------------------
 
 /// 列某个项目下的文件；`game_version` / `loader` 传空串表示不筛。
 pub async fn files(
@@ -529,11 +488,6 @@ fn parse_mr_file(version: &Value, kind: &str) -> Option<MarketFile> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// 安装
-// ---------------------------------------------------------------------------
-
-/// 把某个文件装进实例（模组 / 资源包 / 光影包）。
 pub async fn install_file(
     instance_id: &str,
     file: MarketFile,
@@ -570,7 +524,6 @@ pub async fn install_file(
     })
 }
 
-/// 下载整合包并导入成新实例。
 pub async fn install_modpack(
     file: MarketFile,
     progress: ProgressFn<'_>,
@@ -601,7 +554,6 @@ pub async fn install_modpack(
     instance::import_modpack(&path)
 }
 
-/// 候选下载地址：原始直链在前，镜像替换在后。
 fn download_candidates(url: &str) -> Vec<String> {
     let mut urls = vec![url.to_string()];
     let mirror = net::mirror_download(url);
@@ -650,7 +602,6 @@ fn string_list(value: Option<&Value>) -> Vec<String> {
 mod tests {
     use super::*;
 
-    /// 资源类型要映射到各自的 classId，别一锅端。
     #[test]
     fn probe_class_ids() {
         assert_eq!(cf_class_id("mod"), 6);
@@ -660,7 +611,6 @@ mod tests {
         assert_ne!(cf_class_id("mod"), cf_class_id("modpack"));
     }
 
-    /// 加载器名要能换成 CF 的枚举值，不认识的返回 None。
     #[test]
     fn probe_loader_type() {
         assert_eq!(cf_loader_type("Forge"), Some(1));
@@ -669,7 +619,6 @@ mod tests {
         assert_eq!(cf_loader_type("paper"), None);
     }
 
-    /// 文件名要能挡住目录穿越。
     #[test]
     fn probe_safe_name() {
         assert_eq!(safe_name("../../evil.jar"), "evil.jar");
@@ -677,7 +626,6 @@ mod tests {
         assert_eq!(safe_name("  "), "download.bin");
     }
 
-    /// CF 的 modules 决定落点目录，缺信息时按资源类型兜底。
     #[test]
     fn probe_folder() {
         let mod_file = serde_json::json!({"modules": [{"name": "META-INF"}, {"name": "mods"}]});
@@ -687,7 +635,6 @@ mod tests {
         assert_eq!(cf_file_folder(&bare, "resourcepack"), "resourcepacks");
     }
 
-    /// Modrinth 版本要挑 primary 文件，并带上 sha1 供校验。
     #[test]
     fn probe_mr_file() {
         let version = serde_json::json!({

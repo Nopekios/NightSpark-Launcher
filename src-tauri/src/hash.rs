@@ -1,13 +1,9 @@
-//! 哈希与文件校验。
-//!
-//! 这里自己实现 SHA-1，不引第三方 crate：整合包下载链路只需要这一个算法，
-//! 手写一份能保证行为可读、可单测，也免得为一个 hash 拖一个依赖进来。
+//! 哈希与文件校验：手写 SHA-1，不引第三方 crate（整合包链路只需要这一个算法，也便于单测）。
 
 use std::path::Path;
 
 use crate::error::AppError;
 
-/// 对一段字节算 SHA-1，返回 20 字节摘要。
 fn sha1_digest(bytes: &[u8]) -> [u8; 20] {
     let mut state: [u32; 5] = [
         0x6745_2301,
@@ -83,7 +79,6 @@ fn sha1_digest(bytes: &[u8]) -> [u8; 20] {
     out
 }
 
-/// 把摘要转成小写十六进制串。
 fn to_hex(digest: &[u8]) -> String {
     let mut text = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -92,12 +87,10 @@ fn to_hex(digest: &[u8]) -> String {
     text
 }
 
-/// 对内存里的内容算 SHA-1 十六进制串。
 pub fn sha1_bytes(bytes: &[u8]) -> String {
     to_hex(&sha1_digest(bytes))
 }
 
-/// 对磁盘文件算 SHA-1 十六进制串。
 pub fn sha1_file(path: &Path) -> Result<String, AppError> {
     let bytes = std::fs::read(path)?;
     Ok(sha1_bytes(&bytes))
@@ -116,7 +109,6 @@ pub fn supported_sha1(expected: &str) -> Option<&str> {
     }
 }
 
-/// 校验文件哈希是否与期望一致（大小写不敏感）。
 pub fn verify_file(path: &Path, expected: &str) -> Result<bool, AppError> {
     let Some(expected) = supported_sha1(expected) else {
         return Ok(false);
@@ -129,7 +121,6 @@ pub fn verify_file(path: &Path, expected: &str) -> Result<bool, AppError> {
 mod tests {
     use super::*;
 
-    /// 用标准向量确认 SHA-1 实现没写歪。
     #[test]
     fn probe_sha1_known_vectors() {
         assert_eq!(sha1_bytes(b""), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
@@ -143,7 +134,6 @@ mod tests {
         assert_eq!(sha1_bytes(&long), "34aa973cd4c4daa4f61eeb2bdbad27316534016f");
     }
 
-    /// 哈希串形态判断：只有 40 位十六进制才认为可以校验。
     #[test]
     fn probe_supported_sha1() {
         assert!(supported_sha1("a9993e364706816aba3e25717850c26c9cd0d89d").is_some());

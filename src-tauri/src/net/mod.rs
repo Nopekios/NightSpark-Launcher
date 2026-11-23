@@ -1,9 +1,5 @@
-//! 模组站网络层：CurseForge API、镜像策略、文件直链拼装、Maven 仓库地址。
-//!
-//! CurseForge 官方 API 要 `x-api-key`，PCL 也是这么干的：key 从环境变量
-//! (`CURSEFORGE_API_KEY`) 读，请求时只往 `api.curseforge.com` 这个 host 上挂。
-//! 没 key 的时候 PCL 靠 mcimirror 这个第三方反代顶上，这里同样先打官方、
-//! 失败或返回数量不够再用镜像重来一次。
+//! 模组站网络层：CurseForge API（key 从 `CURSEFORGE_API_KEY` 读，只挂官方 host，没 key 走
+//! mcimirror 反代）、镜像策略、文件直链拼装、Maven 仓库地址。
 
 use std::time::Duration;
 
@@ -12,23 +8,15 @@ use serde_json::Value;
 
 use crate::error::AppError;
 
-/// CurseForge 官方 API 根。
 pub const CF_API: &str = "https://api.curseforge.com";
 /// mcimirror 给 CurseForge API 做的反代根（免 key）。
 pub const CF_MIRROR: &str = "https://mod.mcimirror.top/curseforge";
-/// CurseForge 官方文件 CDN。
 pub const CF_CDN: &str = "https://edge.forgecdn.net";
-/// mcimirror 给文件 CDN 做的反代根。
 pub const CF_CDN_MIRROR: &str = "https://mod.mcimirror.top";
-/// Forge 官方 Maven。
 pub const MCFORGE_MAVEN: &str = "https://maven.minecraftforge.net";
-/// Forge Maven 的 BMCLAPI 镜像。
 pub const MCFORGE_MAVEN_MIRROR: &str = "https://bmclapi2.bangbang93.com/maven";
-/// NeoForge 官方 Maven。
 pub const NEOFORGE_MAVEN: &str = "https://maven.neoforged.net/releases";
-/// Fabric / Quilt 的元数据服务。
 pub const FABRIC_META: &str = "https://meta.fabricmc.net";
-/// Quilt 的元数据服务。
 pub const QUILT_META: &str = "https://meta.quiltmc.org";
 
 /// 一次 API 请求最多带多少个 fileId，官方接口上限 50。
@@ -51,7 +39,6 @@ pub fn curseforge_key() -> Option<String> {
     None
 }
 
-/// CurseForge API 的候选地址：官方在前，镜像兜底。
 pub fn curseforge_api_candidates(path: &str) -> Vec<String> {
     let official = format!("{CF_API}/{}", path.trim_start_matches('/'));
     let mirror = mirror_api(&official);
@@ -67,7 +54,6 @@ pub fn mirror_api(url: &str) -> String {
     url.replace(CF_API, CF_MIRROR)
 }
 
-/// 把文件直链换成镜像直链，规则与 PCL 的 `DlSourceModDownloadGet` 一致。
 pub fn mirror_download(url: &str) -> String {
     url.replace("https://cdn.modrinth.com", CF_CDN_MIRROR)
         .replace(CF_CDN, CF_CDN_MIRROR)
@@ -92,7 +78,6 @@ pub fn curseforge_cdn_url(file_id: i64, file_name: &str) -> Option<String> {
     ))
 }
 
-/// 一个文件的全部候选直链：官方在前，镜像在后。
 pub fn curseforge_download_urls(file_id: i64, file_name: &str) -> Vec<String> {
     let Some(official) = curseforge_cdn_url(file_id, file_name) else {
         return Vec::new();
@@ -119,7 +104,6 @@ pub fn encode_component(input: &str) -> String {
     out
 }
 
-/// 一个 CurseForge 文件条目，只留整合包补齐用得上的字段。
 #[derive(Serialize, Clone, Debug)]
 pub struct CfFile {
     pub file_id: i64,
@@ -128,7 +112,6 @@ pub struct CfFile {
     pub display_name: String,
     pub size: u64,
     pub sha1: Option<String>,
-    /// 应该落到实例里的哪个子目录，取自 CF 的 `modules` 字段。
     pub folder: String,
     pub urls: Vec<String>,
 }
@@ -182,7 +165,6 @@ fn pick_sha1(file: &Value) -> Option<String> {
         .map(|value| value.to_ascii_lowercase())
 }
 
-/// 把一个 JSON 文件条目转成内部结构。
 fn parse_file(file: &Value) -> Option<CfFile> {
     let file_id = file.get("id").and_then(Value::as_i64)?;
     let file_name = file
@@ -325,7 +307,6 @@ pub async fn fetch_curseforge_files(ids: &[i64]) -> Result<Vec<CfFile>, AppError
 mod tests {
     use super::*;
 
-    /// 官方 CDN 路径规则：前 4 位 + 余下位。
     #[test]
     fn probe_curseforge_cdn_url() {
         assert_eq!(
@@ -336,7 +317,6 @@ mod tests {
         assert!(curseforge_cdn_url(1234567, "  ").is_none());
     }
 
-    /// 镜像替换必须与 PCL 的规则对齐。
     #[test]
     fn probe_mirror_rules() {
         assert_eq!(
@@ -349,7 +329,6 @@ mod tests {
         );
     }
 
-    /// 候选地址顺序：官方在前、镜像在后，且去重。
     #[test]
     fn probe_download_urls() {
         let urls = curseforge_download_urls(1234567, "a b.jar");
@@ -358,7 +337,6 @@ mod tests {
         assert!(urls[1].starts_with("https://mod.mcimirror.top/files/1234/567/"));
     }
 
-    /// modules 决定落到哪个目录。
     #[test]
     fn probe_resolve_folder() {
         let mod_file = serde_json::json!({"modules": [{"name": "META-INF"}, {"name": "mcmod.info"}]});
@@ -371,7 +349,6 @@ mod tests {
         assert_eq!(resolve_folder(&empty), "mods");
     }
 
-    /// hashes 里只认 algo=1 的那条 SHA-1。
     #[test]
     fn probe_pick_sha1() {
         let file = serde_json::json!({"hashes": [{"algo": 2, "value": "md5"}, {"algo": 1, "value": "ABC"}]});

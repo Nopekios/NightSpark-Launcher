@@ -1,11 +1,4 @@
-//! 加载器安装：Fabric / Quilt 走官方元数据里的 profile，Forge / NeoForge 走官方 installer。
-//!
-//! 两条路的共同点：最后都要在「实例自己的 `versions/<target>`」和「共享版本目录」里
-//! 各放一份版本 json，启动器只认这两处的元数据。差别在于：
-//! - Fabric / Quilt 的 profile 是现成的完整 json，我们只负责下载 libraries 并落盘；
-//! - Forge / NeoForge 的安装过程必须跑 installer（它要执行 processors 生成打补丁后的
-//!   client jar），所以这里准备好临时目录 + `launcher_profiles.json` 再调用它，
-//!   装完把 versions / libraries 搬回我们的目录。
+//! 加载器安装：Fabric / Quilt 走官方 profile json，Forge / NeoForge 走官方 installer。
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -29,7 +22,6 @@ const INSTALLER_ATTEMPTS: u32 = 3;
 const LAUNCHER_PROFILE_BODY: &str =
     "{\"profiles\":{},\"settings\":{},\"version\":3}";
 
-/// 支持的四类加载器。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum LoaderKind {
     Forge,
@@ -39,7 +31,6 @@ pub enum LoaderKind {
 }
 
 impl LoaderKind {
-    /// 对外展示用的名字。
     pub fn as_str(self) -> &'static str {
         match self {
             LoaderKind::Forge => "forge",
@@ -49,7 +40,6 @@ impl LoaderKind {
         }
     }
 
-    /// 从整合包 manifest 里的写法解析：forge / neoforge / fabric / quilt。
     pub fn parse(text: &str) -> Option<Self> {
         match text.trim().to_ascii_lowercase().as_str() {
             "forge" => Some(LoaderKind::Forge),
@@ -93,21 +83,15 @@ pub fn parse_loader_spec(spec: &str) -> Option<(LoaderKind, Option<String>)> {
     Some((kind, version))
 }
 
-/// 安装结果，直接序列化给前端。
 #[derive(Serialize, Clone, Debug)]
 pub struct LoaderReport {
     pub loader: String,
     pub loader_version: String,
     pub mc_version: String,
-    /// 安装后实例要用的版本 id，形如 `1.20.1-forge-47.2.0`。
     pub target_version: String,
-    /// 版本 json 的落盘位置。
     pub version_json: String,
-    /// 下到本地的文件数量。
     pub downloaded: usize,
-    /// 本地已有、校验通过而跳过的数量。
     pub skipped: usize,
-    /// 需要提醒用户的话。
     pub messages: Vec<String>,
 }
 
@@ -177,7 +161,6 @@ fn maven_relative(name: &str) -> Option<String> {
     ))
 }
 
-/// 递归复制目录，同名同大小的文件直接跳过。
 fn copy_tree(source: &Path, destination: &Path) -> Result<usize, AppError> {
     let mut copied = 0usize;
     std::fs::create_dir_all(destination)?;
@@ -411,7 +394,6 @@ async fn resolve_neoforge_version(
         })
 }
 
-/// NeoForge 的 maven 坐标（artifact + version）随游戏版本变，单独抽出来。
 fn neoforge_coords(mc_version: &str, loader_version: &str) -> (String, String) {
     if mc_version == "1.20.1" {
         (
@@ -426,7 +408,6 @@ fn neoforge_coords(mc_version: &str, loader_version: &str) -> (String, String) {
     }
 }
 
-/// 二进制 installer 的候选直链。
 fn installer_urls(kind: LoaderKind, mc_version: &str, loader_version: &str) -> Vec<String> {
     match kind {
         LoaderKind::Forge => {
@@ -452,7 +433,6 @@ fn installer_urls(kind: LoaderKind, mc_version: &str, loader_version: &str) -> V
     }
 }
 
-/// Fabric / Quilt 的 profile 地址。
 fn profile_urls(kind: LoaderKind, mc_version: &str, loader_version: &str) -> Vec<String> {
     match kind {
         LoaderKind::Fabric => vec![
@@ -472,7 +452,6 @@ fn profile_urls(kind: LoaderKind, mc_version: &str, loader_version: &str) -> Vec
     }
 }
 
-/// 查 Fabric / Quilt 的最新加载器版本。
 async fn resolve_fabric_version(
     client: &reqwest::Client,
     kind: LoaderKind,
@@ -507,7 +486,6 @@ async fn resolve_fabric_version(
     )))
 }
 
-/// Fabric / Quilt：拿现成 profile，下 libraries，落盘。
 async fn install_profile_loader(
     kind: LoaderKind,
     instance: &instance::Instance,
@@ -544,7 +522,6 @@ async fn install_profile_loader(
         .ok_or_else(|| AppError::Config("profile 里没有 id 字段".to_string()))?;
 
     let mut messages: Vec<String> = Vec::new();
-    // 1) 先把版本 json 写进实例目录，保证哪怕下面的库没下完，元数据也是完整的。
     let local_dir = game_dir.join("versions").join(&target_version);
     std::fs::create_dir_all(&local_dir)?;
     let json_path = local_dir.join(format!("{target_version}.json"));
@@ -554,7 +531,6 @@ async fn install_profile_loader(
     )?;
     progress("profile", 1, 1);
 
-    // 2) libraries：maven 坐标 + 该库自带的仓库地址。
     let mut jobs: Vec<FileJob> = Vec::new();
     let libraries_dir = download::libraries_dir()?;
     if let Some(libraries) = profile.get("libraries").and_then(Value::as_array) {
@@ -582,7 +558,6 @@ async fn install_profile_loader(
     let summary = download::download_jobs(jobs, "loader-libraries", progress).await?;
     messages.extend(summary.failed.clone());
 
-    // 3) 原版 client jar 与共享版本目录。
     ensure_client_jar(&game_dir, &target_version, mc_version, &mut messages);
     publish_version(&game_dir, &target_version, &local_dir, &mut messages)?;
 
@@ -660,7 +635,6 @@ async fn install_from_installer_profile(
         .unwrap_or("")
         .to_string();
 
-    // 1) universal（或 client）包从 installer 里解出来，按 maven 坐标摆好。
     if let (Some(coords), Some(file_path)) = (
         install.get("path").and_then(Value::as_str).map(str::trim),
         install.get("filePath").and_then(Value::as_str).map(str::trim),
@@ -679,7 +653,6 @@ async fn install_from_installer_profile(
         }
     }
 
-    // 2) versionInfo 里的依赖库，forge 自家那条已经放过，跳过。
     let mut jobs: Vec<FileJob> = Vec::new();
     if let Some(libraries) = version_info.get("libraries").and_then(Value::as_array) {
         for library in libraries {
@@ -730,7 +703,6 @@ async fn install_from_installer_profile(
         Some(download::download_jobs(jobs, "loader-libraries", progress).await?)
     };
 
-    // 3) 版本 json 落盘 + 原版 client jar + 同步共享目录。
     let local_dir = game_dir.join("versions").join(&target_version);
     std::fs::create_dir_all(&local_dir)?;
     let json_path = local_dir.join(format!("{target_version}.json"));
@@ -767,7 +739,6 @@ async fn install_from_installer_profile(
     }))
 }
 
-/// installer 里读文本条目。
 fn read_zip_text<R: std::io::Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
     name: &str,
@@ -779,7 +750,6 @@ fn read_zip_text<R: std::io::Read + std::io::Seek>(
     Some(text)
 }
 
-/// Forge / NeoForge：下 installer，跑它，再把产物搬回来。
 async fn install_binary_loader(
     kind: LoaderKind,
     instance: &instance::Instance,
@@ -792,7 +762,6 @@ async fn install_binary_loader(
     let tmp_dir = game_dir.join(INSTALL_TMP_DIR);
     std::fs::create_dir_all(&tmp_dir)?;
 
-    // 1) installer 本体
     let installer_name = format!("{}-{}-installer.jar", kind.as_str(), loader_version);
     let installer_path = tmp_dir.join(&installer_name);
     let urls = installer_urls(kind, mc_version, loader_version);
@@ -944,7 +913,6 @@ async fn install_binary_loader(
         )));
     }
 
-    // 5) 从 work/versions 里挑出刚装出来的版本目录
     let versions_root = work_dir.join("versions");
     let (source_dir, target_version) =
         pick_installed_version(kind, mc_version, &versions_root, &versions_before).ok_or_else(|| {
@@ -955,7 +923,6 @@ async fn install_binary_loader(
             ))
         })?;
 
-    // 6) 产物搬回实例目录 / 共享目录 / 共享库目录
     let mut messages: Vec<String> = Vec::new();
     let json_path = publish_version(&game_dir, &target_version, &source_dir, &mut messages)?;
     let libraries_source = work_dir.join("libraries");
@@ -1041,8 +1008,6 @@ fn pick_installed_version(
         .cloned()
 }
 
-/// 给实例装一个加载器。
-///
 /// `spec` 可以写 `forge`、`neoforge`、`fabric`，也可以带版本 `forge-47.2.0`；
 /// `loader_version` 入参优先于 `spec` 里带的版本。
 pub async fn install(
@@ -1159,7 +1124,6 @@ mod tests {
         assert!(parse_loader_spec("").is_none());
     }
 
-    /// maven 坐标转路径，含 classifier 的也要对。
     #[test]
     fn probe_maven_relative() {
         assert_eq!(
@@ -1173,7 +1137,6 @@ mod tests {
         assert!(maven_relative("bad").is_none());
     }
 
-    /// Forge 的安装包直链：官方 Maven 布局 + BMCLAPI 镜像。
     #[test]
     fn probe_installer_urls() {
         let urls = installer_urls(LoaderKind::Forge, "1.20.1", "47.2.0");
@@ -1208,7 +1171,6 @@ mod tests {
         ));
     }
 
-    /// Fabric profile 地址。
     #[test]
     fn probe_profile_urls() {
         let urls = profile_urls(LoaderKind::Fabric, "1.20.1", "0.16.9");
@@ -1256,7 +1218,6 @@ mod tests {
         }
     }
 }
-
 
 /// 读整合包导入时写下的加载器要求（`<game_dir>/.nightspark/pack.json`）。
 fn read_pack_meta(game_dir: &str) -> Option<(String, String)> {

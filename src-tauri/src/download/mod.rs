@@ -1,12 +1,4 @@
-//! 版本安装模块：拉取版本清单，下载 client jar、libraries、natives 与 assets。
-//!
-//! 目录布局（全部基于共享的 `.minecraft` 根目录，实例之间不重复下载）：
-//! - `versions/<id>/<id>.json`      版本元数据
-//! - `versions/<id>/<id>.jar`       客户端主 jar
-//! - `versions/<id>/<id>-natives/`  解压出来的本地库
-//! - `libraries/...`                依赖库
-//! - `assets/indexes/<id>.json`     资源索引
-//! - `assets/objects/xx/<hash>`     资源本体
+//! 版本安装模块：拉取版本清单，下载 client jar、libraries、natives 与 assets 到共享 `.minecraft`。
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -21,21 +13,14 @@ use tokio::sync::Semaphore;
 use crate::config;
 use crate::error::AppError;
 
-/// Mojang 官方版本清单地址。
 const VERSION_MANIFEST_URL: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-/// 资源文件下载根地址。
 const RESOURCE_BASE: &str = "https://resources.download.minecraft.net";
-/// 同时下载的最大文件数。
 const CONCURRENCY: usize = 16;
 /// 单个请求超时（秒）。
 const HTTP_TIMEOUT_SECS: u64 = 60;
 
 /// 进度回调：`(阶段, 已完成, 总数)`。
 pub type ProgressFn<'a> = &'a (dyn Fn(&str, u64, u64) + Send + Sync);
-
-// ---------------------------------------------------------------------------
-// 路径规划
-// ---------------------------------------------------------------------------
 
 /// 共享游戏根目录，默认 `%APPDATA%\.minecraft`。
 pub fn shared_root() -> Result<PathBuf, AppError> {
@@ -74,11 +59,6 @@ pub fn indexes_dir() -> Result<PathBuf, AppError> {
     Ok(assets_dir()?.join("indexes"))
 }
 
-// ---------------------------------------------------------------------------
-// 数据结构
-// ---------------------------------------------------------------------------
-
-/// 版本清单。
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionManifest {
     /// 最新版本信息，暂未在 UI 中展示，保留以便后续做「一键装最新正式版」。
@@ -94,7 +74,6 @@ pub struct LatestVersions {
     pub snapshot: String,
 }
 
-/// 清单里的一条版本记录。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VersionEntry {
     pub id: String,
@@ -105,7 +84,6 @@ pub struct VersionEntry {
     pub release_time: String,
 }
 
-/// 版本元数据（只取启动需要的字段）。
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionMeta {
     pub id: String,
@@ -219,7 +197,6 @@ pub struct Artifact {
     pub url: String,
     #[serde(default)]
     pub size: Option<u64>,
-    /// 官方清单里给的 SHA-1，用来核对下载和本地文件。
     #[serde(default)]
     pub sha1: Option<String>,
 }
@@ -249,7 +226,6 @@ pub struct OsRule {
     pub version: Option<String>,
 }
 
-/// 资源索引文件。
 #[derive(Debug, Clone, Deserialize)]
 pub struct AssetIndexFile {
     #[serde(default)]
@@ -262,7 +238,6 @@ pub struct AssetObject {
     pub size: u64,
 }
 
-/// 安装结果概览，交给前端展示。
 #[derive(Debug, Clone, Serialize)]
 pub struct InstallReport {
     pub version: String,
@@ -270,10 +245,6 @@ pub struct InstallReport {
     pub libraries: u32,
     pub assets: u32,
 }
-
-// ---------------------------------------------------------------------------
-// 规则与路径工具
-// ---------------------------------------------------------------------------
 
 /// 当前运行平台的 OS 名称，MC 元数据里 Windows 写作 `windows`。
 fn current_os_name() -> &'static str {
@@ -338,7 +309,6 @@ pub fn rules_allow(rules: &[Rule]) -> bool {
     allowed
 }
 
-/// 按 rules 判断依赖库是否适用于当前平台；无 rules 视为允许。
 pub fn library_allowed(library: &Library) -> bool {
     match &library.rules {
         None => true,
@@ -407,7 +377,6 @@ pub fn maven_to_path(name: &str) -> String {
     format!("{group}/{artifact}/{version}/{artifact}-{version}{classifier}.jar")
 }
 
-/// 依赖库对应的本地绝对路径。
 pub fn library_file_path(library: &Library) -> Result<Option<PathBuf>, AppError> {
     let Some(downloads) = &library.downloads else {
         // 少数库只有 name 没 url（如旧版 natives），按 maven 规则本地路径推测。
@@ -438,7 +407,6 @@ pub fn substitute(input: &str, vars: &HashMap<&str, String>) -> String {
     out
 }
 
-/// 读取本地已安装的版本元数据。
 pub fn load_local_meta(version_id: &str) -> Result<VersionMeta, AppError> {
     let path = version_json_path(version_id)?;
     let raw = std::fs::read_to_string(&path).map_err(|_| {
@@ -539,10 +507,6 @@ pub fn is_installed(version_id: &str) -> bool {
             .unwrap_or(false)
 }
 
-// ---------------------------------------------------------------------------
-// 网络
-// ---------------------------------------------------------------------------
-
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
         .user_agent("NightSpark/0.1")
@@ -568,7 +532,6 @@ async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, AppEr
         .map_err(|e| AppError::Http(format!("读取响应失败 {url}: {e}")))
 }
 
-/// 拉取版本清单。
 pub async fn fetch_manifest() -> Result<VersionManifest, AppError> {
     let client = http_client()?;
     let raw = fetch_text(&client, VERSION_MANIFEST_URL).await?;
@@ -647,7 +610,6 @@ fn with_part_suffix(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
-/// 并发下载一批文件，边下边回报进度。
 async fn download_batch(
     tasks: Vec<DownloadTask>,
     stage: &str,
@@ -708,10 +670,6 @@ async fn download_batch(
     }
 }
 
-// ---------------------------------------------------------------------------
-// 对外下载入口（整合包补齐 / 加载器安装共用）
-// ---------------------------------------------------------------------------
-
 /// 一个待下载文件：候选源可以给多个，按顺序重试。
 pub struct FileJob {
     pub urls: Vec<String>,
@@ -720,21 +678,15 @@ pub struct FileJob {
     pub sha1: Option<String>,
 }
 
-/// 一批下载的结果统计。
 #[derive(serde::Serialize, Clone, Debug, Default)]
 pub struct DownloadSummary {
-    /// 这次真正下载成功的数量。
     pub downloaded: usize,
-    /// 本地已有且校验通过、直接跳过的数量。
     pub skipped: usize,
-    /// 失败明细，一条一个文件。
     pub failed: Vec<String>,
     /// 失败项在入参里的下标，与 `failed` 一一对应，方便调用方回写清单。
     pub failed_index: Vec<usize>,
 }
 
-/// 并发下载一批文件。
-///
 /// 与内部 `download_batch` 的区别：每个文件可以带一串候选源（官方 + 镜像），
 /// 前一个源失败会自动换下一个；本地已有文件会先做大小 + SHA-1 校验，
 /// 校验不过就当没下过，重新拉到对为止。
@@ -850,11 +802,6 @@ pub async fn download_jobs(
     Ok(summary)
 }
 
-// ---------------------------------------------------------------------------
-// 安装
-// ---------------------------------------------------------------------------
-
-/// 解压 natives jar 到目录，跳过 META-INF 与排除项。
 fn extract_natives(jar: &Path, dest: &Path, exclude: &[String]) -> Result<(), AppError> {
     std::fs::create_dir_all(dest)?;
     let file = std::fs::File::open(jar)?;
@@ -891,7 +838,6 @@ fn extract_natives(jar: &Path, dest: &Path, exclude: &[String]) -> Result<(), Ap
     Ok(())
 }
 
-/// 安装指定版本：client jar + libraries + natives + 资源索引 + 资源文件。
 pub async fn install_version(
     version_id: &str,
     with_assets: bool,
@@ -916,7 +862,6 @@ pub async fn install_version(
     std::fs::create_dir_all(&vdir)?;
     std::fs::write(version_json_path(version_id)?, &raw)?;
 
-    // 1) 客户端主 jar
     let client_artifact = meta
         .downloads
         .client
@@ -934,7 +879,6 @@ pub async fn install_version(
     )
     .await?;
 
-    // 2) 依赖库与 natives
     let libs_root = libraries_dir()?;
     let natives_root = natives_dir(version_id)?;
     let mut lib_tasks = Vec::new();
@@ -1013,7 +957,6 @@ pub async fn install_version(
         }
     }
 
-    // 3) 资源索引与资源文件
     let mut asset_count = 0u32;
     if let Some(index_ref) = &meta.asset_index {
         let index_path = indexes_dir()?.join(format!("{}.json", index_ref.id));
@@ -1138,7 +1081,6 @@ pub fn ensure_natives(version_id: &str) -> Result<u32, AppError> {
     Ok(extracted)
 }
 
-/// 汇总当前允许的依赖库绝对路径（启动时构建 classpath 用）。
 pub fn collect_classpath(meta: &VersionMeta, version_id: &str) -> Result<Vec<PathBuf>, AppError> {
     let mut paths = Vec::new();
     for library in &meta.libraries {
@@ -1157,7 +1099,6 @@ pub fn collect_classpath(meta: &VersionMeta, version_id: &str) -> Result<Vec<Pat
     }
     Ok(paths)
 }
-
 
 #[cfg(test)]
 mod merge_args_tests {
