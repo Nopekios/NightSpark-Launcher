@@ -620,7 +620,7 @@ pub async fn download_pending_reported(
 ) -> Result<PendingReport, AppError> {
     let instance = super::get_instance(instance_id)?;
     let game_dir = PathBuf::from(&instance.game_dir);
-    let list_path = game_dir.join(".love-launcher").join("pending-mods.json");
+    let list_path = game_dir.join(".nightspark").join("pending-mods.json");
     if !list_path.is_file() {
         return Err(AppError::NotFound(
             "这个实例没有待下载清单，它应该不是 CurseForge / Modrinth 整合包".into(),
@@ -829,9 +829,9 @@ pub async fn download_pending_reported(
     Ok(report)
 }
 
-/// 把本次补齐结果写成 `<游戏目录>/.love-launcher/last-pending-report.json`。
+/// 把本次补齐结果写成 `<游戏目录>/.nightspark/last-pending-report.json`。
 fn write_pending_report(game_dir: &Path, report: &PendingReport) -> Result<(), AppError> {
-    let dir = game_dir.join(".love-launcher");
+    let dir = game_dir.join(".nightspark");
     std::fs::create_dir_all(&dir)?;
     let payload = serde_json::json!({
         "format": 1,
@@ -884,7 +884,7 @@ fn civil_from_days(days: i64) -> (i64, u64, u64) {
 
 /// 记录整合包要求的加载器，供「装加载器」在用户不填版本时使用。
 fn write_pack_meta(game_dir: &Path, loader: &str, mc_version: &str) -> Result<(), AppError> {
-    let dir = game_dir.join(".love-launcher");
+    let dir = game_dir.join(".nightspark");
     std::fs::create_dir_all(&dir)?;
     let payload = serde_json::json!({
         "format": 1,
@@ -898,7 +898,7 @@ fn write_pack_meta(game_dir: &Path, loader: &str, mc_version: &str) -> Result<()
 }
 
 fn write_pending(game_dir: &Path, pending: &[PendingMod]) -> Result<PathBuf, AppError> {
-    let dir = game_dir.join(".love-launcher");
+    let dir = game_dir.join(".nightspark");
     std::fs::create_dir_all(&dir)?;
     let path = dir.join("pending-mods.json");
     let payload = serde_json::json!({
@@ -1166,7 +1166,7 @@ mod tests {
         }
 
         unsafe {
-            std::env::set_var("LOVE_LAUNCHER_HOME", root.join("home"));
+            std::env::set_var("NIGHTSPARK_HOME", root.join("home"));
             std::env::set_var("MINECRAFT_DIR", root.join("shared"));
         }
 
@@ -1227,7 +1227,7 @@ mod tests {
 
         // 把配置目录与共享游戏目录都关进临时根，别碰真实用户目录
         unsafe {
-            std::env::set_var("LOVE_LAUNCHER_HOME", root.join("home"));
+            std::env::set_var("NIGHTSPARK_HOME", root.join("home"));
             std::env::set_var("MINECRAFT_DIR", root.join("shared"));
         }
 
@@ -1423,7 +1423,7 @@ mod tests {
         }
 
         unsafe {
-            std::env::set_var("LOVE_LAUNCHER_HOME", root.join("home"));
+            std::env::set_var("NIGHTSPARK_HOME", root.join("home"));
             std::env::set_var("MINECRAFT_DIR", root.join("shared"));
         }
 
@@ -1433,7 +1433,7 @@ mod tests {
 
         let game_dir = PathBuf::from(&report.instance.game_dir);
         assert!(game_dir.join("config/fo.toml").is_file(), "overrides 没解压出来");
-        let pending = game_dir.join(".love-launcher/pending-mods.json");
+        let pending = game_dir.join(".nightspark/pending-mods.json");
         assert!(pending.is_file(), "待下载清单没写出来");
         let text = std::fs::read_to_string(&pending).unwrap();
         assert!(text.contains("sodium.jar"), "清单里没有 mod：{text}");

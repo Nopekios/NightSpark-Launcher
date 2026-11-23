@@ -190,7 +190,7 @@ fn build_command(
     vars.insert("clientid", String::new());
     vars.insert("auth_xuid", String::new());
     vars.insert("version_type", meta.kind.clone().unwrap_or_else(|| "release".to_string()));
-    vars.insert("launcher_name", "Love-Launcher".to_string());
+    vars.insert("launcher_name", "NightSpark".to_string());
     vars.insert("launcher_version", env!("CARGO_PKG_VERSION").to_string());
     vars.insert("classpath", classpath.clone());
     vars.insert("natives_directory", natives_dir.to_string_lossy().to_string());
@@ -367,7 +367,7 @@ pub fn launch(
     // 控制台输出单独落 launcher-console.log，完整保留命令行、JVM 报错与 native 崩溃。
     let console_path = logs_dir.join("launcher-console.log");
     let mut console_file = std::fs::File::create(&console_path)?;
-    writeln!(console_file, "=== Love-Launcher 启动 ===")?;
+    writeln!(console_file, "=== NightSpark 启动 ===")?;
     writeln!(console_file, "$ {summary}")?;
     writeln!(console_file, "==========================")?;
     let stderr_file = console_file.try_clone()?;
@@ -436,7 +436,7 @@ mod live_tests {
         let meta = download::load_merged_meta(&version).expect("读取版本元数据失败");
         let java = std::env::var("TEST_JAVA")
             .unwrap_or_else(|_| r"C:\Dev\JDK\jdk-21.0.13+9\bin\java.exe".to_string());
-        let game_dir = std::env::temp_dir().join("love-launcher-forge-test");
+        let game_dir = std::env::temp_dir().join("nightspark-forge-test");
         std::fs::create_dir_all(&game_dir).unwrap();
         let instance = Instance {
             id: "live-forge".to_string(),
@@ -497,7 +497,7 @@ mod live_tests {
             id: "ignore-list-test".to_string(),
             name: "ignore-list-test".to_string(),
             game_dir: std::env::temp_dir()
-                .join("love-launcher-ignorelist-test")
+                .join("nightspark-ignorelist-test")
                 .to_string_lossy()
                 .to_string(),
             version: version.clone(),
@@ -546,7 +546,7 @@ mod live_tests {
         let meta = download::load_merged_meta(version).expect("读取版本元数据失败");
         let java = std::env::var("TEST_JAVA")
             .unwrap_or_else(|_| r"C:\Dev\JDK\jdk-21.0.13+9\bin\java.exe".to_string());
-        let game_dir = std::env::temp_dir().join("love-launcher-launch-test");
+        let game_dir = std::env::temp_dir().join("nightspark-launch-test");
         std::fs::create_dir_all(&game_dir).unwrap();
 
         let instance = Instance {

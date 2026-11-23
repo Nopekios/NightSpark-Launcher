@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn probe_check_file_marks_missing_and_broken() {
-        let dir = std::env::temp_dir().join("love-launcher-verify-test");
+        let dir = std::env::temp_dir().join("nightspark-verify-test");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("建临时目录失败");
 

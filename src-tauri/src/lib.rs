@@ -43,9 +43,17 @@ pub fn run() {
             commands::install_market_modpack,
             commands::install_java,
             commands::list_java_runtimes
-        ]);
+        ])
+        .setup(|_app| {
+            // 旧配置目录一次性迁移（%APPDATA%\Love-Launcher -> %APPDATA%\NightSpark）。
+            // 必须挂在 setup：它早于窗口创建和前端 invoke，能保证配置、账号、实例
+            // 在第一次被读取之前就已经落到新目录；放到前端首次调用里就晚了。
+            // 迁移函数内部吞掉所有错误（只写 stderr），旧目录异常不会让启动失败。
+            config::migrate_legacy_home();
+            Ok(())
+        });
 
     if let Err(err) = builder.run(tauri::generate_context!()) {
-        eprintln!("Love-Launcher 启动失败: {err}");
+        eprintln!("NightSpark 启动失败: {err}");
     }
 }

@@ -29,12 +29,21 @@ function hueOf(uuid: string): number {
 <template>
   <aside class="side">
     <div class="brand">
-      <div class="brand-mark">L</div>
+      <img
+        class="brand-mark"
+        src="/nightspark.svg"
+        alt="NightSpark"
+        draggable="false"
+      />
       <div class="brand-text">
-        <strong>Love-Launcher</strong>
+        <strong>NightSpark</strong>
         <span>for Minecraft</span>
       </div>
     </div>
+
+    <div class="brand-rule" />
+
+    <span class="nav-cap">导航</span>
 
     <nav class="nav">
       <button
@@ -71,72 +80,114 @@ function hueOf(uuid: string): number {
 
 <style scoped>
 .side {
-  width: 216px;
-  flex: 0 0 216px;
+  position: relative;
+  width: 212px;
+  flex: 0 0 212px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px 16px 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
-  border-right: 1px solid var(--line);
-  backdrop-filter: blur(18px);
+  gap: 12px;
+  padding: 20px 14px 16px;
+  background: linear-gradient(180deg, rgba(19, 29, 42, 0.72) 0%, rgba(8, 13, 20, 0.82) 100%);
+  border-right: 1px solid rgba(126, 160, 199, 0.1);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+  box-shadow: inset -1px 0 0 rgba(0, 149, 255, 0.06);
+  z-index: 2;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 6px;
+  gap: 11px;
+  padding: 2px 6px 0;
 }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 17px;
-  color: #06120a;
-  background: linear-gradient(135deg, var(--grass), var(--grass-deep));
-  box-shadow: 0 8px 20px rgba(90, 216, 111, 0.28);
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 149, 255, 0.45));
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
-  line-height: 1.25;
+  gap: 1px;
+  line-height: 1.2;
+  min-width: 0;
 }
 
 .brand-text strong {
-  font-size: 13px;
-  letter-spacing: 0.2px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .brand-text span {
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 600;
   color: var(--text-faint);
-  letter-spacing: 0.6px;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.brand-rule {
+  height: 1px;
+  margin: 4px 6px 2px;
+  background: linear-gradient(90deg, transparent, rgba(126, 160, 199, 0.22) 22%, rgba(0, 149, 255, 0.3) 50%, rgba(126, 160, 199, 0.22) 78%, transparent);
+}
+
+.nav-cap {
+  padding: 0 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .nav-item {
+  position: relative;
   display: grid;
   grid-template-columns: 18px 1fr;
   grid-template-rows: auto auto;
   align-items: center;
-  gap: 0 10px;
-  padding: 10px 12px;
+  gap: 1px 11px;
+  padding: 9px 12px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
   text-align: left;
   color: var(--text-dim);
+  transition: background 0.2s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s ease,
+    border-color 0.2s ease, transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 左侧激活光条 */
+.nav-item::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  width: 2px;
+  height: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #3eb1ff, #0072c6);
+  box-shadow: 0 0 10px rgba(0, 149, 255, 0.9);
+  transform: translateY(-50%);
+  transition: height 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-item svg {
@@ -145,48 +196,79 @@ function hueOf(uuid: string): number {
   height: 18px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: stroke-width 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-item .nav-label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
+  letter-spacing: 0.005em;
   color: var(--text);
+  transition: color 0.2s ease;
 }
 
 .nav-item .nav-hint {
   font-size: 10px;
   color: var(--text-faint);
-  letter-spacing: 0.2px;
+  letter-spacing: 0.01em;
 }
 
 .nav-item:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--line);
+  background: rgba(126, 160, 199, 0.07);
+  border-color: rgba(126, 160, 199, 0.12);
+  color: var(--text);
+  transform: translateX(1px);
+}
+
+.nav-item:hover:not(.active) svg {
+  stroke-width: 1.9;
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(90, 216, 111, 0.16), rgba(90, 216, 111, 0.05));
-  border-color: rgba(90, 216, 111, 0.32);
-  color: var(--grass);
+  background: linear-gradient(100deg, rgba(0, 149, 255, 0.16) 0%, rgba(0, 149, 255, 0.03) 62%);
+  border-color: rgba(0, 149, 255, 0.22);
+  color: var(--accent-hi);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 22px -14px rgba(0, 149, 255, 0.9);
+}
+
+.nav-item.active::before {
+  height: 20px;
 }
 
 .nav-item.active .nav-label {
-  color: var(--grass);
+  color: #cfe8ff;
 }
 
+.nav-item.active .nav-hint {
+  color: rgba(107, 170, 224, 0.9);
+}
+
+.nav-item.active svg {
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(0, 149, 255, 0.7));
+}
+
+/* 底部账号卡 */
 .account-chip {
   margin-top: auto;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(126, 160, 199, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.015) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   text-align: left;
+  overflow: hidden;
+}
+
+.account-chip:hover:not(:disabled) {
+  border-color: rgba(0, 149, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 26px -14px rgba(0, 149, 255, 0.7);
 }
 
 .avatar {
@@ -196,84 +278,45 @@ function hueOf(uuid: string): number {
   border-radius: 10px;
   display: grid;
   place-items: center;
-  font-size: 14px;
-  font-weight: 700;
-  color: #06120a;
+  font-size: 13px;
+  font-weight: 800;
+  color: #05121c;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .avatar.empty {
-  background: rgba(255, 255, 255, 0.08);
   color: var(--text-faint);
+  background: rgba(126, 160, 199, 0.1);
+  border-color: rgba(126, 160, 199, 0.18);
+  box-shadow: none;
+  font-weight: 700;
 }
 
 .account-meta {
   display: flex;
   flex-direction: column;
+  gap: 1px;
   min-width: 0;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .account-meta strong {
   font-size: 12px;
-  white-space: nowrap;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text);
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .account-meta em {
-  font-size: 10px;
   font-style: normal;
+  font-size: 10px;
   color: var(--text-faint);
-}
-/* ===== 像素风侧栏 ===== */
-aside {
-  background: linear-gradient(180deg, #1c2530 0%, #121922 100%);
-  border-right: 2px solid #0a0e12;
-}
-
-.brand-mark {
-  border-radius: 3px;
-  font-weight: 800;
-  color: #10240f;
-  background: linear-gradient(180deg, #7ee06f 0 44%, #6b4a2b 44% 100%);
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), inset 0 -3px 0 rgba(0, 0, 0, 0.35),
-    0 3px 0 rgba(0, 0, 0, 0.45);
-}
-
-.brand-text strong {
-  letter-spacing: 0.5px;
-}
-
-.nav-item {
-  border: 2px solid transparent;
-  border-radius: 4px;
-}
-
-.nav-item.active {
-  position: relative;
-  background: linear-gradient(180deg, rgba(98, 204, 85, 0.22), rgba(47, 122, 51, 0.12));
-  border-color: rgba(98, 204, 85, 0.45);
-}
-
-.nav-item.active::before {
-  content: "";
-  position: absolute;
-  left: -2px;
-  top: 6px;
-  bottom: 6px;
-  width: 4px;
-  background: var(--grass);
-  box-shadow: 0 0 8px rgba(98, 204, 85, 0.6);
-}
-
-.account-chip {
-  border-radius: 4px;
-  border: 2px solid #0a0e12;
-  background: #10161d;
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.06);
-}
-
-.account-chip:hover {
-  border-color: rgba(98, 204, 85, 0.45);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 </style>

@@ -5,6 +5,8 @@ import HomeView from "./views/HomeView.vue";
 import AccountView from "./views/AccountView.vue";
 import DownloadView from "./views/DownloadView.vue";
 import SettingsView from "./views/SettingsView.vue";
+import SmoothCursor from "./components/ui/smooth-cursor/SmoothCursor.vue";
+import SleekLineCursor from "./components/ui/sleek-line-cursor/SleekLineCursor.vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   api,
@@ -384,6 +386,8 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
+    <SleekLineCursor :trails="22" :size="46" :friction="0.52" />
+    <SmoothCursor />
     <SideNav :active="active" :account="account" @navigate="active = $event" />
     <div v-if="dropActive" class="drop-veil">
       <div class="drop-card">
@@ -393,6 +397,7 @@ onUnmounted(() => {
     </div>
 
 
+    <Transition name="view" mode="out-in">
     <HomeView
       v-if="active === 'home'"
       :instances="instances"
@@ -423,15 +428,15 @@ onUnmounted(() => {
       @notify="notify"
     />
     <SettingsView v-else @notify="notify" />
+    </Transition>
 
     <Transition name="toast">
       <div v-if="logPanel" class="modal-mask" @click.self="closeLog">
         <div class="log-modal">
           <header>
+            <span class="log-dot" />
             <strong>{{ logPanel.title }}</strong>
-            <div>
-              <button @click="closeLog">关闭</button>
-            </div>
+            <button class="log-close" @click="closeLog">关闭</button>
           </header>
           <pre>{{ logPanel.text }}</pre>
         </div>
@@ -462,23 +467,29 @@ onUnmounted(() => {
 
 <style scoped>
 .app-shell {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
+  isolation: isolate;
 }
 
+/* ── 全局任务条：玻璃胶囊 + 流光进度 ── */
 .task-bar {
   position: fixed;
   left: 50%;
   bottom: 26px;
   z-index: 40;
-  width: min(460px, 76vw);
+  width: min(480px, 76vw);
   transform: translateX(-50%);
-  padding: 12px 16px 13px;
-  border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--line);
-  background: var(--bg-panel, #14131c);
-  box-shadow: var(--shadow-soft);
+  padding: 13px 18px 15px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 149, 255, 0.24);
+  background: linear-gradient(180deg, rgba(24, 38, 52, 0.92), rgba(12, 18, 27, 0.95));
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 26px 60px -24px rgba(0, 0, 0, 0.98),
+    0 0 30px -12px rgba(0, 149, 255, 0.55);
   font-size: 12.5px;
 }
 
@@ -487,7 +498,7 @@ onUnmounted(() => {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: var(--text-dim);
 }
 
@@ -495,31 +506,47 @@ onUnmounted(() => {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  letter-spacing: 0.01em;
 }
 
 .task-percent {
   flex: none;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-  color: var(--text, #e8e6f0);
+  color: #ffffff;
 }
 
 .task-track {
+  position: relative;
   height: 6px;
   border-radius: 999px;
-  background: var(--line);
+  background: rgba(126, 160, 199, 0.14);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
   overflow: hidden;
 }
 
 .task-fill {
+  position: relative;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent, #7c6cff), var(--accent-2, #58c8ff));
-  transition: width 0.25s ease;
+  background: linear-gradient(90deg, #0072c6, #3eb1ff 58%, #35e0c8);
+  box-shadow: 0 0 14px rgba(0, 149, 255, 0.75);
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+.task-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: ll-shine 1.9s ease-in-out infinite;
 }
 
 .task-fill.moving {
   width: 34%;
-  animation: task-slide 1.15s ease-in-out infinite;
+  animation: task-slide 1.15s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 @keyframes task-slide {
@@ -531,64 +558,109 @@ onUnmounted(() => {
   }
 }
 
+/* ── 日志弹层 ── */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(4, 8, 13, 0.72);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  backdrop-filter: blur(10px) saturate(120%);
+}
+
 .log-modal {
   display: flex;
   flex-direction: column;
-  width: min(860px, 88vw);
+  width: min(880px, 90vw);
   max-height: 76vh;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
-  background: var(--bg-panel, #14131c);
-  box-shadow: var(--shadow-soft);
+  border-radius: 20px;
+  border: 1px solid rgba(126, 160, 199, 0.18);
+  background: linear-gradient(180deg, #0f1826 0%, #0a111b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 40px 90px -30px rgba(0, 0, 0, 1);
   overflow: hidden;
 }
 
 .log-modal header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  padding: 14px 16px 14px 18px;
+  border-bottom: 1px solid rgba(126, 160, 199, 0.12);
   font-size: 13px;
 }
 
+.log-modal header strong {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+
+.log-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2fd07f;
+  box-shadow: 0 0 10px rgba(47, 208, 127, 0.85);
+}
+
+.log-close {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
 .log-modal pre {
+  flex: 1;
   margin: 0;
-  padding: 16px 18px;
+  padding: 16px 20px 20px;
   overflow: auto;
-  font-family: "Cascadia Code", Consolas, monospace;
+  background: rgba(0, 0, 0, 0.24);
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   font-size: 11.5px;
-  line-height: 1.7;
-  color: var(--text-dim);
+  line-height: 1.75;
+  color: #9fb3c8;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
+/* ── 拖拽导入遮罩 ── */
 .drop-veil {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 80;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 9, 16, 0.62);
-  backdrop-filter: blur(2px);
+  background: rgba(4, 8, 13, 0.66);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .drop-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 22px 30px;
-  border-radius: var(--radius-md, 12px);
-  border: 1px dashed var(--accent, #8b7bff);
-  background: var(--bg-panel, #14131c);
+  padding: 28px 40px;
+  border-radius: 20px;
+  border: 1px dashed rgba(0, 149, 255, 0.55);
+  background: rgba(14, 24, 38, 0.9);
   text-align: center;
+  box-shadow: 0 0 0 1px rgba(0, 149, 255, 0.12), 0 30px 70px -30px rgba(0, 0, 0, 0.95),
+    0 0 60px -20px rgba(0, 149, 255, 0.5);
+  animation: ll-float 4.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 .drop-card strong {
   font-size: 15px;
+  letter-spacing: -0.01em;
 }
 
 .drop-card span {

@@ -14,6 +14,12 @@
     "noEmit": true,
     "jsx": "preserve",
 
+    /* 路径别名：@/ 指向 src，配合 vite.config.ts 的 resolve.alias
+       注意 TS 6.0 已弃用 baseUrl，paths 直接相对 tsconfig 解析 */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

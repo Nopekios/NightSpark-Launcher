@@ -2,6 +2,9 @@
 import { computed, onUnmounted, ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api, errText, type Account } from "../api";
+import CardContainer from "@/components/ui/card-3d/CardContainer.vue";
+import CardBody from "@/components/ui/card-3d/CardBody.vue";
+import CardItem from "@/components/ui/card-3d/CardItem.vue";
 
 const props = defineProps<{ account: Account | null }>();
 
@@ -127,8 +130,11 @@ onUnmounted(cleanup);
       <span v-else class="tag muted">未登录</span>
     </header>
 
-    <div v-if="account" class="panel profile">
-      <div class="profile-main">
+    <CardContainer v-if="account" class="acc-3d">
+      <CardBody class="acc-3d-body">
+        <CardItem :translate-z="36" class="acc-3d-item">
+          <div class="panel profile">
+            <div class="profile-main">
         <div class="face">{{ account.name.slice(0, 1).toUpperCase() }}</div>
         <div>
           <h2>{{ account.name }}</h2>
@@ -150,6 +156,9 @@ onUnmounted(cleanup);
         <button class="ghost-danger" @click="logout">退出登录</button>
       </div>
     </div>
+        </CardItem>
+      </CardBody>
+    </CardContainer>
 
     <div v-else class="panel login">
       <h2>绑定 Microsoft 账号</h2>
@@ -175,109 +184,199 @@ onUnmounted(cleanup);
 </template>
 
 <style scoped>
+.acc-3d {
+  display: block;
+  width: 100%;
+  padding: 0;
+}
+
+.acc-3d :deep(.acc-3d-body) {
+  width: 100%;
+  height: auto;
+}
+
+.acc-3d :deep(.acc-3d-item) {
+  width: 100%;
+}
+
 .profile {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 26px 28px;
 }
 
 .profile-main {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 18px;
 }
 
 .face {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
   display: grid;
   place-items: center;
-  font-size: 24px;
-  font-weight: 700;
-  color: #06120a;
-  background: linear-gradient(135deg, var(--grass), var(--grass-deep));
-  box-shadow: 0 10px 26px rgba(90, 216, 111, 0.25);
+  width: 68px;
+  height: 68px;
+  flex: none;
+  border-radius: 18px;
+  font-size: 26px;
+  font-weight: 800;
+  color: #f4fbff;
+  background: linear-gradient(150deg, #3eb1ff 0%, #0072c6 62%, #04487d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 16px 34px -14px rgba(0, 149, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 28, 56, 0.6);
 }
 
 .profile-main h2 {
-  margin: 0 0 4px;
-  font-size: 19px;
+  margin: 6px 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
 }
 
 .uuid {
   margin: 0;
-  font-size: 12px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   color: var(--text-faint);
-  letter-spacing: 0.5px;
+  word-break: break-all;
 }
 
 .facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
-  margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
 }
 
 .facts div {
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  padding: 12px 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(126, 160, 199, 0.12);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .facts dt {
-  font-size: 11px;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--text-faint);
-  margin-bottom: 5px;
 }
 
 .facts dd {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .profile-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  padding-top: 4px;
 }
 
+/* ── 未登录态 ── */
 .login {
-  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 30px 32px;
 }
 
 .login h2 {
-  margin: 0 0 10px;
-  font-size: 17px;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
 }
 
 .login p {
-  margin: 0 0 18px;
-  font-size: 13px;
+  margin: 0;
+  max-width: 56ch;
+  font-size: 12.5px;
   line-height: 1.75;
   color: var(--text-dim);
 }
 
 .login .progress {
-  margin: 16px 0 0;
-  color: var(--grass);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: #9fd0ff;
+}
+
+.login .progress::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #3eb1ff;
+  box-shadow: 0 0 10px rgba(0, 149, 255, 0.9);
+  animation: ll-glow-pulse 1.4s ease-in-out infinite;
 }
 
 .login .error {
-  margin: 16px 0 0;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(239, 90, 90, 0.35);
-  background: rgba(239, 90, 90, 0.1);
-  color: #ffb4b4;
-  word-break: break-word;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 90, 110, 0.34);
+  background: rgba(255, 90, 110, 0.07);
+  font-size: 12px;
+  color: #ffc2ca;
 }
 
 .tips {
-  margin: 20px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  line-height: 1.9;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tips li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 11.5px;
+  line-height: 1.65;
   color: var(--text-faint);
 }
+
+.tips li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(0, 149, 255, 0.7);
+  box-shadow: 0 0 8px rgba(0, 149, 255, 0.6);
+}
+/* ── 账号页：大号身份卡 ── */
+.account-card,
+.panel.account {
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 18px 40px -18px rgba(0, 149, 255, 0.85);
+  animation: ll-glow-pulse 5.5s ease-in-out infinite;
+}
+
 </style>

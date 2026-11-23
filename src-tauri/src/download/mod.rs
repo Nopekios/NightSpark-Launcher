@@ -545,7 +545,7 @@ pub fn is_installed(version_id: &str) -> bool {
 
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent("Love-Launcher/0.1")
+        .user_agent("NightSpark/0.1")
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
         .build()
         .map_err(|e| AppError::Http(format!("创建 HTTP 客户端失败: {e}")))

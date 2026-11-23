@@ -31,7 +31,7 @@ pub struct JavaRuntime {
 
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent(concat!("Love-Launcher/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("NightSpark/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| AppError::Internal(format!("创建 HTTP 客户端失败: {e}")))
@@ -54,7 +54,7 @@ async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, AppEr
         .map_err(|e| AppError::Http(format!("读取 {url} 响应失败: {e}")))
 }
 
-/// Java 运行时的落地根目录：`config_dir/Love-Launcher/runtimes`。
+/// Java 运行时的落地根目录：`config_dir/NightSpark/runtimes`。
 pub fn runtimes_root() -> Result<PathBuf, AppError> {
     let path = crate::config::launcher_config_path()?;
     let dir = path

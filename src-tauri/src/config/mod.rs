@@ -61,20 +61,182 @@ pub fn minecraft_dir() -> Result<PathBuf, AppError> {
     Ok(data_dir.join(".minecraft"))
 }
 
-/// 启动器自身配置文件路径：`config_dir/Love-Launcher/config.json`。
+/// 当前启动器在系统配置目录下的文件夹名。
+const CURRENT_DIR_NAME: &str = "NightSpark";
+/// 项目改名前旧版启动器的文件夹名（`%APPDATA%\Love-Launcher`）。
+const LEGACY_DIR_NAME: &str = "Love-Launcher";
+
+/// 启动器自身配置文件路径：`config_dir/NightSpark/config.json`。
 ///
 /// 刻意不放进 `.minecraft`，避免与游戏数据混在一起。
 pub fn launcher_config_path() -> Result<PathBuf, AppError> {
-    if let Ok(home) = env::var("LOVE_LAUNCHER_HOME") {
-        let home = home.trim().trim_matches('"');
-        if !home.is_empty() {
-            return Ok(PathBuf::from(home).join("config.json"));
+    if let Some(home) = env_override("NIGHTSPARK_HOME") {
+        return Ok(home.join("config.json"));
+    }
+
+    Ok(current_home_dir()?.join("config.json"))
+}
+
+/// 读取一个「非空即生效」的环境变量覆盖值，去掉首尾空白与成对引号。
+///
+/// 空串或只有空白一律视为未设置，避免命令行里留个 `NIGHTSPARK_HOME=` 就把路径解析带偏。
+fn env_override(key: &str) -> Option<PathBuf> {
+    let raw = env::var(key).ok()?;
+    let trimmed = raw.trim().trim_matches('"');
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    }
+}
+
+/// 当前配置目录 `config_dir/NightSpark`；只解析路径，不创建。
+fn current_home_dir() -> Result<PathBuf, AppError> {
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
+    Ok(config_dir.join(CURRENT_DIR_NAME))
+}
+
+/// 旧版配置目录 `config_dir/Love-Launcher`；只解析路径，不创建。
+fn legacy_home_dir() -> Result<PathBuf, AppError> {
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
+    Ok(config_dir.join(LEGACY_DIR_NAME))
+}
+
+/// 旧配置目录一次性迁移的结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MigrationOutcome {
+    /// 无需迁移：设置了 NIGHTSPARK_HOME、旧目录不存在，或新目录已存在
+    Skipped,
+    /// 通过目录改名完成，旧目录已随改名消失
+    Renamed,
+    /// 改名失败后改用复制完成，旧目录按保守策略保留
+    Copied,
+    /// 迁移失败，旧目录保持原样
+    Failed,
+}
+
+/// 把旧版 `%APPDATA%\Love-Launcher` 一次性迁移到 `%APPDATA%\NightSpark`。
+///
+/// **触发条件（三条同时满足才会真正搬运）**：
+/// 1. 未设置 `NIGHTSPARK_HOME`。该变量一旦存在，配置根目录就由用户显式接管，
+///    `%APPDATA%` 下的目录不再是权威数据，此时迁移既无意义、也可能动到不该动的目录；
+/// 2. 旧目录 `Love-Launcher` 存在且确实是目录；
+/// 3. 新目录 `NightSpark` **完全不存在**。
+///
+/// 第 3 条是「绝不覆盖已有数据」的关键约束。新目录只要存在，哪怕里面只有一个空文件，
+/// 也说明这台机器已经用 NightSpark 跑过，配置、账号、实例都可能是比旧目录更新的版本。
+/// 这种情况下既不做覆盖、也不做目录合并——两份 `instances` 合并会让同名实例互相污染，
+/// 收益远低于风险，因此直接放弃迁移，交由用户自行处理。
+///
+/// **失败处理**：任何一步出错都只写一行 stderr 日志并返回 [`MigrationOutcome::Failed`]，
+/// 不 panic、也不向上传递错误，保证旧目录状态异常时启动器照样能打开。
+///
+/// **旧目录去留**：
+/// - 走 rename 成功时，旧目录已随改名消失，不存在清理问题；
+/// - rename 失败（跨卷、被其他进程占用等）会退化为复制。复制成功后**保留**旧目录：
+///   此时旧目录是唯一能证明「哪些文件原本就在」的副本，一旦复制有疏漏，自动删除
+///   就会造成不可恢复的数据丢失。确认新目录可用后由用户手动删除更安全。
+pub fn migrate_legacy_home() -> MigrationOutcome {
+    if env_override("NIGHTSPARK_HOME").is_some() {
+        log_migration("已设置 NIGHTSPARK_HOME，配置目录由用户接管，跳过");
+        return MigrationOutcome::Skipped;
+    }
+
+    let current = match current_home_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            log_migration(&format!("无法定位当前配置目录，跳过: {err}"));
+            return MigrationOutcome::Failed;
+        }
+    };
+
+    let legacy = match legacy_home_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            log_migration(&format!("无法定位旧配置目录，跳过: {err}"));
+            return MigrationOutcome::Failed;
+        }
+    };
+
+    if !legacy.is_dir() {
+        // 绝大多数情况走这里：已经迁移过或本来就是全新安装，不打日志避免每次启动刷屏。
+        return MigrationOutcome::Skipped;
+    }
+
+    if current.exists() {
+        log_migration(&format!(
+            "新目录已存在（{}），为保护现有配置/账号/实例不做覆盖，跳过迁移",
+            current.display()
+        ));
+        return MigrationOutcome::Skipped;
+    }
+
+    // 同一父目录下改名，等价于 mv，原子且不会产生半份数据。
+    match std::fs::rename(&legacy, &current) {
+        Ok(()) => {
+            log_migration(&format!(
+                "已将 {} 重命名为 {}",
+                legacy.display(),
+                current.display()
+            ));
+            MigrationOutcome::Renamed
+        }
+        Err(err) => {
+            log_migration(&format!("直接改名失败（{err}），改用复制方式迁移"));
+            match copy_dir_all(&legacy, &current) {
+                Ok(files) => {
+                    log_migration(&format!(
+                        "已复制 {} 个文件到 {}，旧目录暂予保留，确认无误后可手动删除",
+                        files,
+                        current.display()
+                    ));
+                    MigrationOutcome::Copied
+                }
+                Err(err) => {
+                    log_migration(&format!("复制迁移失败: {err}，清理半成品目录"));
+                    // 半成品目录会让下次启动命中「新目录已存在」而永远不再重试，
+                    // 这里只删除本次刚创建的目录，旧目录原样保留。
+                    let _ = std::fs::remove_dir_all(&current);
+                    MigrationOutcome::Failed
+                }
+            }
+        }
+    }
+}
+
+/// 递归复制目录，返回实际复制的文件数量；用于 rename 失败后的退化路径。
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<usize, String> {
+    std::fs::create_dir_all(dst).map_err(|err| format!("创建 {} 失败: {err}", dst.display()))?;
+
+    let entries =
+        std::fs::read_dir(src).map_err(|err| format!("读取 {} 失败: {err}", src.display()))?;
+
+    let mut copied = 0usize;
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("遍历 {} 失败: {err}", src.display()))?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let meta = entry
+            .metadata()
+            .map_err(|err| format!("读取 {} 属性失败: {err}", from.display()))?;
+
+        if meta.is_dir() {
+            copied += copy_dir_all(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)
+                .map_err(|err| format!("复制 {} 失败: {err}", from.display()))?;
+            copied += 1;
         }
     }
 
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
-    Ok(config_dir.join("Love-Launcher").join("config.json"))
+    Ok(copied)
+}
+
+/// 迁移日志统一写 stderr：Windows 发布版没有控制台时不会阻塞启动，也不会污染前端。
+fn log_migration(msg: &str) {
+    eprintln!("[NightSpark] 配置目录迁移: {msg}");
 }
 
 /// 读取启动器配置；文件不存在时返回默认配置。

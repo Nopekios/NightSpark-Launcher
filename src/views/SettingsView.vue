@@ -15,6 +15,7 @@ const emit = defineEmits<{
 const javas = ref<JavaInfo[]>([]);
 const scanning = ref(false);
 const selected = ref<string | null>(null);
+const tab = ref<"runtime" | "install" | "memory" | "paths">("runtime");
 const scanError = ref("");
 const memory = ref(4096);
 const saving = ref(false);
@@ -125,7 +126,24 @@ onMounted(async () => {
       </div>
     </header>
 
-    <div class="panel block">
+    <div class="set-shell">
+      <nav class="set-nav">
+        <button :class="{ on: tab === 'runtime' }" @click="tab = 'runtime'">
+          <strong>运行时</strong><span>Java 选择</span>
+        </button>
+        <button :class="{ on: tab === 'install' }" @click="tab = 'install'">
+          <strong>一键装</strong><span>官方运行时</span>
+        </button>
+        <button :class="{ on: tab === 'memory' }" @click="tab = 'memory'">
+          <strong>内存</strong><span>Xmx 分配</span>
+        </button>
+        <button :class="{ on: tab === 'paths' }" @click="tab = 'paths'">
+          <strong>目录</strong><span>缓存与实例</span>
+        </button>
+      </nav>
+      <div class="set-panes">
+    <Transition name="pane" mode="out-in">
+      <div v-if="tab === 'runtime'" class="panel block">
       <div class="block-head">
         <h2>Java 运行时</h2>
         <span class="tag muted">{{ javas.length }} 个候选</span>
@@ -146,18 +164,18 @@ onMounted(async () => {
             <span class="path" :title="item.path">{{ item.path }}</span>
             <em>Java {{ item.version }}</em>
           </div>
-          <span class="check">{{ selected === item.path ? "已选" : "" }}</span>
+          <span class="check">{{ selected === item.path ? "已选择" : "" }}</span>
         </li>
       </ul>
     </div>
 
-    <div class="panel block">
+    <div v-else-if="tab === 'install'" class="panel block">
       <div class="block-head">
         <h2>一键装 Java</h2>
         <span class="tag muted">Mojang 官方运行时</span>
       </div>
       <p class="hint">
-        没合适版本的 Java 时在这儿下一个，装到 %APPDATA%\Love-Launcher\runtimes\，下载进度看底部进度条。
+        没合适版本的 Java 时在这儿下一个，装到 %APPDATA%\NightSpark\runtimes\，下载进度看底部进度条。
       </p>
       <ul class="runtime-list">
         <li v-for="item in MAJOR_HINTS" :key="item.major">
@@ -181,7 +199,7 @@ onMounted(async () => {
       </ul>
     </div>
 
-    <div class="panel block">
+    <div v-else-if="tab === 'memory'" class="panel block">
       <div class="block-head">
         <h2>内存分配</h2>
         <span class="tag ok">生效中</span>
@@ -195,210 +213,266 @@ onMounted(async () => {
       </p>
     </div>
 
-    <div class="panel block">
+    <div v-else class="panel block">
       <div class="block-head">
         <h2>目录</h2>
       </div>
       <ul class="kv">
         <li>
           <span>账号缓存</span>
-          <em>%APPDATA%\Love-Launcher\account.json</em>
+          <em>%APPDATA%\NightSpark\account.json</em>
         </li>
         <li>
           <span>实例数据</span>
-          <em>%APPDATA%\Love-Launcher\instances\</em>
+          <em>%APPDATA%\NightSpark\instances\</em>
         </li>
       </ul>
+    </div>
+    </Transition>
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.runtime-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+/* 分区切换：分页式横移 + 淡入（替代原来的瞬切） */
+.pane-enter-active {
+  transition: opacity 0.26s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.runtime-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md, 12px);
-  border: 1px solid var(--line);
-  background: var(--bg-soft, rgba(255, 255, 255, 0.02));
+.pane-leave-active {
+  transition: opacity 0.14s ease, transform 0.14s ease;
 }
 
-.rt-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  font-size: 12.5px;
+.pane-enter-from {
+  opacity: 0;
+  transform: translateX(18px);
 }
 
-.rt-main strong {
-  font-size: 13px;
+.pane-leave-to {
+  opacity: 0;
+  transform: translateX(-14px);
 }
 
-.rt-note {
-  color: var(--text-dim);
-}
 .head-actions {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
+/* ── 分区 ── */
 .block {
-  margin-bottom: 18px;
+  padding: 22px 24px;
+  margin-bottom: 16px;
 }
 
 .block-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(126, 160, 199, 0.1);
 }
 
 .block-head h2 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.block-head h2::before {
+  content: "";
+  width: 3px;
+  height: 13px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #3eb1ff, #0072c6);
+  box-shadow: 0 0 10px rgba(0, 149, 255, 0.85);
 }
 
 .hint {
-  margin: 8px 0 0;
-  font-size: 12px;
+  margin: 0;
+  font-size: 11.5px;
   line-height: 1.7;
   color: var(--text-faint);
 }
 
 .error {
-  margin: 8px 0 0;
+  margin: 12px 0 0;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 90, 110, 0.34);
+  background: rgba(255, 90, 110, 0.07);
   font-size: 12px;
-  color: #ffb4b4;
+  color: #ffc2ca;
 }
 
+/* ── Java 运行时列表 ── */
+.runtime-list,
 .java-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runtime-list li,
+.java-list li {
+  display: flex;
+  overflow: hidden;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(126, 160, 199, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.007) 100%),
+    rgba(12, 18, 27, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  font-size: 12.5px;
+  transition: border-color 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1), transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.22s ease;
 }
 
 .java-list li {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 11px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
   cursor: pointer;
-  transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 .java-list li:hover {
-  border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 149, 255, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 16px 34px -22px rgba(0, 149, 255, 0.85);
+  transform: translateY(-1px);
 }
 
 .java-list li.picked {
-  border-color: rgba(90, 216, 111, 0.45);
-  background: rgba(90, 216, 111, 0.08);
+  border-color: rgba(0, 149, 255, 0.48);
+  background: linear-gradient(100deg, rgba(0, 149, 255, 0.16) 0%, rgba(0, 149, 255, 0.03) 64%),
+    rgba(12, 18, 27, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 0 1px rgba(0, 149, 255, 0.12),
+    0 18px 40px -24px rgba(0, 149, 255, 0.95);
+}
+
+.rt-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rt-main strong {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.rt-note {
+  font-size: 11px;
+  color: var(--text-faint);
 }
 
 .java-ver {
-  flex: 0 0 52px;
-  text-align: center;
-  padding: 5px 0;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: #06120a;
-  background: rgba(90, 216, 111, 0.85);
+  letter-spacing: 0.03em;
+  color: #bfe0ff;
+  background: rgba(0, 149, 255, 0.12);
+  border: 1px solid rgba(0, 149, 255, 0.22);
 }
 
 .java-meta {
   display: flex;
   flex-direction: column;
+  gap: 3px;
   min-width: 0;
   flex: 1;
 }
 
 .java-meta .path {
-  font-size: 12px;
-  white-space: nowrap;
+  display: block;
+  max-width: 100%;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  color: #7f95ab;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .java-meta em {
-  font-size: 11px;
+  display: block;
+  max-width: 100%;
   font-style: normal;
+  font-size: 10.5px;
   color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .check {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 999px;
   font-size: 11px;
-  color: var(--grass);
+  font-weight: 800;
+  color: #05121c;
+  background: linear-gradient(180deg, #6fd0ff, #0095ff);
+  box-shadow: 0 0 12px rgba(0, 149, 255, 0.7);
 }
 
+/* ── 内存 ── */
 .memory {
   display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.memory input[type="range"] {
-  flex: 1;
-  appearance: none;
-  height: 10px;
-  border-radius: 3px;
-  padding: 0;
-  border: 2px solid #0a0e12;
-  background: #0f151b;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55);
-}
-
-.memory input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 20px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, var(--grass-hi), var(--grass-deep));
-  border: 2px solid #14351a;
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 2px 0 rgba(0, 0, 0, 0.45);
-  cursor: pointer;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .memory strong {
-  flex: 0 0 62px;
-  text-align: right;
-  font-size: 14px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #cfe8ff;
 }
 
+/* ── 键值信息 ── */
 .kv {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .kv li {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 10px 2px;
+  border-bottom: 1px solid rgba(126, 160, 199, 0.08);
   font-size: 12px;
+}
+
+.kv li:last-child {
+  border-bottom: none;
 }
 
 .kv span {
@@ -407,76 +481,140 @@ onMounted(async () => {
 
 .kv em {
   font-style: normal;
-  color: var(--text-faint);
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* ── 左侧分类导航 + 右侧单分区 ── */
+.set-shell {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
 }
 
-/* ===== 设置页分区强化 ===== */
-.block {
-  margin-bottom: 14px;
+.set-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(126, 160, 199, 0.12);
+  background: linear-gradient(180deg, rgba(18, 28, 40, 0.74), rgba(10, 15, 23, 0.74));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.block-head h2 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-}
-
-.block-head h2::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 13px;
-  margin-right: 9px;
-  vertical-align: -2px;
-  background: var(--grass);
-  box-shadow: 0 0 8px rgba(98, 204, 85, 0.6);
-}
-
-.java-list li {
-  border: 2px solid #0b1015;
-  border-radius: 4px;
-  margin-bottom: 8px;
-}
-
-.java-list li.picked {
-  border-color: rgba(98, 204, 85, 0.8);
-  background: rgba(98, 204, 85, 0.08);
-  box-shadow: 0 0 0 2px rgba(98, 204, 85, 0.14);
-}
-
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 12px;
-  padding: 0;
-  background: #0f151b;
-  border: 2px solid #0a0e12;
-  border-radius: 3px;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55);
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 22px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, var(--grass-hi), var(--grass-deep));
-  border: 2px solid #14351a;
-  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 2px 0 rgba(0, 0, 0, 0.45);
+.set-nav button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  box-shadow: none;
+  text-align: left;
   cursor: pointer;
+  transition: background 0.24s ease;
 }
 
-.kv li {
-  padding: 9px 0;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.07);
+.set-nav button:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: transparent;
+  background: rgba(126, 160, 199, 0.08);
 }
 
-.kv li:last-child {
-  border-bottom: none;
+.set-nav button::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #3eb1ff, #0072c6);
+  transform: translateY(-50%);
+  transition: height 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.set-nav button strong {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+
+.set-nav button span {
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+.set-nav button.on {
+  background: rgba(0, 149, 255, 0.1);
+}
+
+.set-nav button.on::before {
+  height: 62%;
+  box-shadow: 0 0 10px rgba(0, 149, 255, 0.9);
+}
+
+.set-nav button.on strong {
+  color: #dff0ff;
+}
+
+.set-panes {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.set-panes .block {
+  margin-bottom: 0;
+  padding: 20px 22px;
+}
+
+/* 选中项左侧光条 */
+.java-list li {
+  position: relative;
+}
+
+.java-list li.picked::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #3eb1ff, #0072c6);
+  box-shadow: 0 0 12px rgba(0, 149, 255, 0.9);
+}
+
+/* 已选择徽章：改成 pill，不再被 20px 圆点裁掉文字 */
+.check {
+  display: grid;
+  place-items: center;
+  width: auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 10px;
+  flex: none;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: #05121c;
+  background: linear-gradient(180deg, #6fd0ff, #0095ff);
+  box-shadow: 0 0 14px rgba(0, 149, 255, 0.6);
+}
+
+.check:empty {
+  display: none;
 }
 
 </style>

@@ -361,7 +361,7 @@ pub async fn get_valid_token(account: &Account) -> Result<String, AppError> {
 fn account_path() -> Result<PathBuf, AppError> {
     let dir = dirs::config_dir()
         .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
-    Ok(dir.join("Love-Launcher").join("account.json"))
+    Ok(dir.join("NightSpark").join("account.json"))
 }
 
 pub fn load_account() -> Result<Option<Account>, AppError> {

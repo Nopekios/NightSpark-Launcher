@@ -40,7 +40,7 @@ const HTTP_TIMEOUT_SECS: u64 = 30;
 ///
 /// 读不到就返回 `None`，调用方直接走镜像，不去造一个假 key。
 pub fn curseforge_key() -> Option<String> {
-    for name in ["CURSEFORGE_API_KEY", "LOVE_LAUNCHER_CF_KEY"] {
+    for name in ["CURSEFORGE_API_KEY", "NIGHTSPARK_CF_KEY"] {
         if let Ok(value) = std::env::var(name) {
             let trimmed = value.trim().to_string();
             if !trimmed.is_empty() {
@@ -222,7 +222,7 @@ fn parse_file(file: &Value) -> Option<CfFile> {
 
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent("Love-Launcher/0.1")
+        .user_agent("NightSpark/0.1")
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
         .build()
         .map_err(|err| AppError::Http(format!("创建 HTTP 客户端失败：{err}")))
@@ -392,7 +392,7 @@ mod tests {
         assert!(!file.urls.is_empty(), "CF 文件应当能拼出直链");
         assert!(file.sha1.is_some(), "CF 文件应当带 SHA-1");
 
-        let dir = std::env::temp_dir().join("love-launcher-cf-live");
+        let dir = std::env::temp_dir().join("nightspark-cf-live");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("建目录失败");
         let dest = dir.join(&file.file_name);

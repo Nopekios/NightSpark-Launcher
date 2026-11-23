@@ -22,7 +22,7 @@ use crate::net;
 /// installer 内部条目名，用来确认下到的确实是加载器安装包。
 const INSTALLER_PROFILE: &str = "install_profile.json";
 /// 装 installer 用的临时子目录（相对实例的游戏目录）。
-const INSTALL_TMP_DIR: &str = ".love-launcher/loader-install";
+const INSTALL_TMP_DIR: &str = ".nightspark/loader-install";
 /// Forge / NeoForge 的 installer 断网类错误最多重试几次（库已下好，重跑很便宜）。
 const INSTALLER_ATTEMPTS: u32 = 3;
 /// 给 installer 看的 profile 文件内容：只求它能认出这是个合法启动器目录。
@@ -113,7 +113,7 @@ pub struct LoaderReport {
 
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .user_agent("Love-Launcher/0.1")
+        .user_agent("NightSpark/0.1")
         .timeout(Duration::from_secs(60))
         .build()
         .map_err(|err| AppError::Http(format!("创建 HTTP 客户端失败：{err}")))
@@ -1223,7 +1223,7 @@ mod tests {
     #[ignore]
     async fn probe_installer_live_reachable() {
         let client = reqwest::Client::builder()
-            .user_agent("Love-Launcher/0.1")
+            .user_agent("NightSpark/0.1")
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("建 HTTP 客户端失败");
@@ -1258,9 +1258,9 @@ mod tests {
 }
 
 
-/// 读整合包导入时写下的加载器要求（`<game_dir>/.love-launcher/pack.json`）。
+/// 读整合包导入时写下的加载器要求（`<game_dir>/.nightspark/pack.json`）。
 fn read_pack_meta(game_dir: &str) -> Option<(String, String)> {
-    let path = Path::new(game_dir).join(".love-launcher").join("pack.json");
+    let path = Path::new(game_dir).join(".nightspark").join("pack.json");
     let text = std::fs::read_to_string(path).ok()?;
     let value: Value = serde_json::from_str(&text).ok()?;
     let loader = value.get("loader").and_then(Value::as_str)?.trim().to_string();

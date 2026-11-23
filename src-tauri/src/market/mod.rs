@@ -140,7 +140,7 @@ const CF_LOADER_NAMES: [&str; 6] = ["Forge", "NeoForge", "Fabric", "Quilt", "Lit
 fn http_client() -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .user_agent("Love-Launcher/0.1")
+        .user_agent("NightSpark/0.1")
         .build()
         .map_err(|err| AppError::Http(format!("创建 HTTP 客户端失败：{err}")))
 }
@@ -575,7 +575,7 @@ pub async fn install_modpack(
     file: MarketFile,
     progress: ProgressFn<'_>,
 ) -> Result<instance::modpack::ImportReport, AppError> {
-    let dir = std::env::temp_dir().join("love-launcher-modpacks");
+    let dir = std::env::temp_dir().join("nightspark-modpacks");
     std::fs::create_dir_all(&dir)?;
     let dest = dir.join(safe_name(&file.name));
     let job = FileJob {

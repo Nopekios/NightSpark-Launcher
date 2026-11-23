@@ -536,7 +536,7 @@ async fn auto_prepare(
     }
 
     // 2. 整合包留下的待下载清单，有直链的直接补齐
-    let pending = game_dir.join(".love-launcher").join("pending-mods.json");
+    let pending = game_dir.join(".nightspark").join("pending-mods.json");
     if pending.is_file() {
         match instance::modpack::download_pending_reported(&target.id, &sink).await {
             Ok(report) => {
@@ -590,10 +590,10 @@ async fn auto_prepare(
     notes
 }
 
-/// 读整合包导入时记下的加载器要求（.love-launcher/pack.json）。
+/// 读整合包导入时记下的加载器要求（.nightspark/pack.json）。
 fn pack_loader(game_dir: &str) -> Option<String> {
     let path = std::path::Path::new(game_dir)
-        .join(".love-launcher")
+        .join(".nightspark")
         .join("pack.json");
     let text = std::fs::read_to_string(path).ok()?;
     let value: serde_json::Value = serde_json::from_str(&text).ok()?;
