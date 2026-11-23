@@ -35,3 +35,12 @@ dev.err.txt
 login_err.png
 ct_dummy
 npm
+
+# Tauri 自动生成的移动端工程与图标（本项目仅发布 Windows 桌面端）
+src-tauri/gen/
+src-tauri/icons/android/
+src-tauri/icons/ios/
+
+# 备份文件与本地编辑器临时目录
+*.bak
+.inspira-tmp/
