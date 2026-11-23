@@ -298,5 +298,10 @@ export default {
     pathsTitle: "Folders",
     pathAccount: "Account cache",
     pathInstances: "Instance data",
+    updCheck: "Check for updates",
+    updChecking: "Checking…",
+    updLatest: "You are up to date",
+    updFound: "New version {version} available",
+    updFailed: "Update check failed: {reason}",
   },
 };

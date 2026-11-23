@@ -2,6 +2,13 @@
   "name": "nightspark",
   "private": true,
   "version": "0.1.0",
+  "description": "NightSpark - a Minecraft: Java Edition launcher for Windows",
+  "author": "毒狐 (Nopekios)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nopekios/NightSpark-Launcher.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +21,7 @@
     "@lucide/vue": "^1.75.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@vueuse/core": "^15.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

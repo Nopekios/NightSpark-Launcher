@@ -9,6 +9,8 @@ import {
   type LauncherConfig,
 } from "../api";
 import { SUPPORTED_LOCALES, currentLocale, setLocale, type Locale } from "../i18n";
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
 
 const emit = defineEmits<{
   (e: "notify", text: string, tone?: "ok" | "err"): void;
@@ -138,8 +140,33 @@ async function save() {
   }
 }
 
+const version = ref("");
+const checking = ref(false);
+
+async function loadVersion() {
+  try {
+    version.value = await getVersion();
+  } catch {
+    version.value = "";
+  }
+}
+
+async function checkUpdate() {
+  if (checking.value) return;
+  checking.value = true;
+  try {
+    const upd = await check();
+    if (upd) emit("notify", t("settings.updFound", { version: upd.version }));
+    else emit("notify", t("settings.updLatest"));
+  } catch (err) {
+    emit("notify", t("settings.updFailed", { reason: errText(err) }), "err");
+  } finally {
+    checking.value = false;
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([scan(), loadConfig(), loadRuntimes()]);
+  await Promise.all([scan(), loadConfig(), loadRuntimes(), loadVersion()]);
 });
 </script>
 
@@ -287,6 +314,15 @@ onMounted(async () => {
       </ul>
     </div>
     </Transition>
+
+      <div class="footer-line">
+        <p class="copyright">© 2026 毒狐 · MIT</p>
+        <span class="sep">·</span>
+        <span class="ver">v{{ version }}</span>
+        <button class="upd" :disabled="checking" @click="checkUpdate">
+          {{ checking ? t("settings.updChecking") : t("settings.updCheck") }}
+        </button>
+      </div>
       </div>
     </div>
   </section>
@@ -316,6 +352,63 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 版权署名行：低存在感，不抢视觉 */
+.copyright {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: rgba(126, 160, 199, 0.42);
+  user-select: none;
+}
+
+.footer-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+  user-select: none;
+}
+
+.footer-line .copyright {
+  margin: 0;
+}
+
+.sep {
+  font-size: 11px;
+  color: rgba(126, 160, 199, 0.3);
+}
+
+.ver {
+  font-size: 11px;
+  color: rgba(126, 160, 199, 0.42);
+  font-variant-numeric: tabular-nums;
+}
+
+.upd {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(126, 160, 199, 0.66);
+  background: rgba(126, 160, 199, 0.08);
+  border: 1px solid rgba(126, 160, 199, 0.18);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.upd:hover:not(:disabled) {
+  color: rgba(186, 216, 255, 0.92);
+  border-color: rgba(126, 160, 199, 0.42);
+  background: rgba(126, 160, 199, 0.16);
+}
+
+.upd:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ── 分区 ── */

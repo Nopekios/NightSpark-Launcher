@@ -298,5 +298,10 @@ export default {
     pathsTitle: "目录",
     pathAccount: "账号缓存",
     pathInstances: "实例数据",
+    updCheck: "检查更新",
+    updChecking: "检查中…",
+    updLatest: "已是最新版本",
+    updFound: "发现新版本 {version}",
+    updFailed: "检查更新失败：{reason}",
   },
 };

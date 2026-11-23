@@ -27,13 +27,31 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
+    "copyright": "Copyright (c) 2026 毒狐 (Nopekios). Licensed under the MIT License.",
+    "resources": {
+      "../LICENSE": "LICENSE"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBCNTVDNzRGNTA3NTZCNTUKUldSVmEzVlFUOGRWQzBscmIvalBaQXZCNXR3YWtxL2EwVUUvUlRKbzB0U3o0czB3S0lMMkhOcmkK",
+      "endpoints": [
+        "https://github.com/Nopekios/NightSpark-Launcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
