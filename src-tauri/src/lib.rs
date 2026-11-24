@@ -9,8 +9,14 @@ mod java;
 mod launch;
 mod market;
 mod net;
+mod watermark;
 
 pub use error::AppError;
+
+#[tauri::command]
+fn watermark_info() -> watermark::Watermark {
+    watermark::info()
+}
 
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -43,7 +49,8 @@ pub fn run() {
             commands::install_market_file,
             commands::install_market_modpack,
             commands::install_java,
-            commands::list_java_runtimes
+            commands::list_java_runtimes,
+            watermark_info
         ])
         .setup(|_app| {
             // 旧配置目录一次性迁移（%APPDATA%\Love-Launcher -> %APPDATA%\NightSpark）。

@@ -7,6 +7,7 @@ import {
   type JavaInfo,
   type JavaRuntime,
   type LauncherConfig,
+  type Watermark,
 } from "../api";
 import { SUPPORTED_LOCALES, currentLocale, setLocale, type Locale } from "../i18n";
 import { getVersion } from "@tauri-apps/api/app";
@@ -142,12 +143,21 @@ async function save() {
 
 const version = ref("");
 const checking = ref(false);
+const wm = ref<Watermark | null>(null);
 
 async function loadVersion() {
   try {
     version.value = await getVersion();
   } catch {
     version.value = "";
+  }
+}
+
+async function loadWatermark() {
+  try {
+    wm.value = await api.getWatermark();
+  } catch {
+    wm.value = null;
   }
 }
 
@@ -166,7 +176,7 @@ async function checkUpdate() {
 }
 
 onMounted(async () => {
-  await Promise.all([scan(), loadConfig(), loadRuntimes(), loadVersion()]);
+  await Promise.all([scan(), loadConfig(), loadRuntimes(), loadVersion(), loadWatermark()]);
 });
 </script>
 
@@ -319,6 +329,10 @@ onMounted(async () => {
         <p class="copyright">© 2026 毒狐 · MIT</p>
         <span class="sep">·</span>
         <span class="ver">v{{ version }}</span>
+        <template v-if="wm">
+          <span class="sep">·</span>
+          <span class="wm" :title="wm.tag">{{ wm.serial }}</span>
+        </template>
         <button class="upd" :disabled="checking" @click="checkUpdate">
           {{ checking ? t("settings.updChecking") : t("settings.updCheck") }}
         </button>
@@ -386,6 +400,14 @@ onMounted(async () => {
   font-size: 11px;
   color: rgba(126, 160, 199, 0.42);
   font-variant-numeric: tabular-nums;
+}
+
+.wm {
+  font-size: 11px;
+  color: rgba(126, 160, 199, 0.42);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  cursor: help;
 }
 
 .upd {

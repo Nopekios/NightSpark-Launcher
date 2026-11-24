@@ -9,6 +9,15 @@ export type GameInstance = {
   game_dir: string;
 };
 
+export type Watermark = {
+  tag: string;
+  serial: string;
+  commit: string;
+  built_at: string;
+  version: string;
+  official: boolean;
+};
+
 export type JavaInfo = {
   path: string;
   version: string;
@@ -176,6 +185,7 @@ export function stageText(stage: string): string {
 }
 
 export const api = {
+  getWatermark: () => invoke<Watermark>("watermark_info"),
   ping: () => invoke<string>("ping"),
   javaList: () => invoke<JavaInfo[]>("get_java_list"),
   installJava: (major: number) => invoke<JavaRuntime>("install_java", { major }),
