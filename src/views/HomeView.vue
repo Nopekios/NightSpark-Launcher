@@ -317,6 +317,14 @@ function submit() {
       </div>
     </header>
 
+    <div class="free-banner">
+      <span class="free-dot" aria-hidden="true"></span>
+      <div class="free-text">
+        <strong>{{ t("home.freeNotice") }}</strong>
+        <span>{{ t("home.freeNoticeNote") }}</span>
+      </div>
+    </div>
+
     <template v-if="hero">
       <div class="detail panel">
         <div class="detail-main">
@@ -1534,4 +1542,36 @@ function submit() {
   }
 }
 
+
+.free-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid rgba(62, 166, 255, 0.26);
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(62, 166, 255, 0.1), rgba(62, 166, 255, 0.015));
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.free-banner strong {
+  display: block;
+  color: #e8f3ff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.free-banner .free-text span {
+  color: #8fb2d4;
+}
+.free-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #48e0a4;
+  box-shadow: 0 0 8px rgba(72, 224, 164, 0.7);
+}
 </style>

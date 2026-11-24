@@ -332,6 +332,7 @@ onMounted(async () => {
         <template v-if="wm">
           <span class="sep">·</span>
           <span class="wm" :title="wm.tag">{{ wm.serial }}</span>
+          <span v-if="!wm.integrity" class="wm-bad" :title="t('settings.wmTampered')">!</span>
         </template>
         <button class="upd" :disabled="checking" @click="checkUpdate">
           {{ checking ? t("settings.updChecking") : t("settings.updCheck") }}
@@ -409,6 +410,19 @@ onMounted(async () => {
   letter-spacing: 0.04em;
   cursor: help;
 }
+.wm-bad {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 92, 92, 0.18);
+  color: #ff7a7a;
+  font-size: 9px;
+  line-height: 1;
+  font-family: ui-monospace, monospace;
+}
+
 
 .upd {
   padding: 2px 8px;

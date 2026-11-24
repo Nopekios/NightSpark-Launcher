@@ -104,6 +104,31 @@ fn base32(data: &[u8], len: usize) -> String {
     out
 }
 
+fn fnv(parts: &[&str]) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for part in parts {
+        for b in part.as_bytes() {
+            h ^= *b as u32;
+            h = h.wrapping_mul(0x0100_0193);
+        }
+    }
+    h
+}
+
+fn split_quartet(tag: &str) -> [String; 4] {
+    let chars: Vec<char> = tag.chars().collect();
+    let n = chars.len();
+    let a = n / 4;
+    let b = n / 2;
+    let c = n * 3 / 4;
+    [
+        chars[..a].iter().collect(),
+        chars[a..b].iter().collect(),
+        chars[b..c].iter().collect(),
+        chars[c..].iter().collect(),
+    ]
+}
+
 fn git(args: &[&str]) -> Option<String> {
     let out = Command::new("git").args(args).output().ok()?;
     if !out.status.success() {
@@ -163,14 +188,36 @@ fn main() {
     let tag = format!("NS-{commit}-{serial}");
     let built_at = if stamp > 0 { utc_date(stamp) } else { "unknown".into() };
 
+    let seg = split_quartet(&tag);
+    let seg0 = &seg[0];
+    let seg1 = &seg[1];
+    let seg2 = &seg[2];
+    let seg3 = &seg[3];
+    let fp0 = base32(&sha256(format!("NSF0|{tag}|{version}").as_bytes()), 16);
+    let fp1 = base32(&sha256(format!("NSF1|{serial}|{commit}|{built_at}").as_bytes()), 16);
+    let fp2 = base32(&sha256(format!("NSF2|{tag}|{stamp}|{version}").as_bytes()), 16);
+    let fp3 = base32(&sha256(format!("NSF3|{serial}|{official}|{built_at}").as_bytes()), 16);
+    let flag = if official { "1" } else { "0" };
+    let chk = fnv(&[&tag, &serial, &commit, &built_at, &version, flag]);
+
     let body = format!(
         "pub const TAG: &str = {:?};\n\
          pub const SERIAL: &str = {:?};\n\
          pub const COMMIT: &str = {:?};\n\
          pub const BUILT_AT: &str = {:?};\n\
          pub const VERSION: &str = {:?};\n\
-         pub const OFFICIAL: bool = {};\n",
-        tag, serial, commit, built_at, version, official
+         pub const OFFICIAL: bool = {};\n\
+         pub const STAMP: u64 = {};\n\
+         pub const SEG0: &str = {:?};\n\
+         pub const SEG1: &str = {:?};\n\
+         pub const SEG2: &str = {:?};\n\
+         pub const SEG3: &str = {:?};\n\
+         pub const FP0: &str = {:?};\n\
+         pub const FP1: &str = {:?};\n\
+         pub const FP2: &str = {:?};\n\
+         pub const FP3: &str = {:?};\n\
+         pub const CHK: u32 = {};\n",
+        tag, serial, commit, built_at, version, official, stamp, seg0, seg1, seg2, seg3, fp0, fp1, fp2, fp3, chk
     );
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));

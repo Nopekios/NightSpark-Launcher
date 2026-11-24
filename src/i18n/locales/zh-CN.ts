@@ -24,6 +24,8 @@ export default {
   },
   home: {
     detailTitle: "实例详情",
+    freeNotice: "NightSpark 完全免费，不存在任何付费安装渠道",
+    freeNoticeNote: "官方版本只在 GitHub Releases 发布。若有人向你收取「代安装费」，那是骗局，请勿付款。",
     listTitle: "我的实例",
     versionLabel: "版本 {version}",
     countPrefix: "共",
@@ -298,6 +300,7 @@ export default {
     pathsTitle: "目录",
     pathAccount: "账号缓存",
     pathInstances: "实例数据",
+    wmTampered: "水印校验异常，此包可能被改动过",
     updCheck: "检查更新",
     updChecking: "检查中…",
     updLatest: "已是最新版本",

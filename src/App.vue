@@ -447,7 +447,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="!booted" class="boot-veil" />
+  <div v-if="!booted" class="boot-veil">
+    <div class="boot-brand">
+      <span class="boot-name">NightSpark</span>
+      <span class="boot-note">{{ tr("home.freeNotice") }}</span>
+    </div>
+  </div>
   <div v-else class="app-shell">
     <SleekLineCursor :trails="22" :size="46" :friction="0.52" />
     <SmoothCursor />
@@ -756,7 +761,32 @@ onUnmounted(() => {
 .boot-veil {
   position: fixed;
   inset: 0;
+  display: grid;
+  place-items: center;
   background: #080c12;
+}
+
+.boot-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.boot-name {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  color: rgba(232, 243, 255, 0.92);
+}
+
+.boot-note {
+  max-width: 360px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(143, 178, 212, 0.72);
 }
 
 .lang-mask {

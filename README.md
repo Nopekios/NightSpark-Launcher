@@ -10,6 +10,14 @@ NightSpark is a Minecraft: Java Edition launcher for Windows. This repository co
 
 ---
 
+## 构建 / Build
+
+自行构建请运行 `scripts/build.ps1`（Windows，需 Node.js 与 Rust 工具链）。这样构建出的包水印标记为 `OFFICIAL=false`，不携带官方签名，不作为官方发布版本。
+
+To build from source, run `scripts/build.ps1` on Windows (Node.js + Rust toolchain required). Such builds carry a watermark with `OFFICIAL=false`, are not signed by the author, and are not official releases.
+
+---
+
 ## License / 许可证
 
 [MIT](LICENSE) © 2026 毒狐 (Nopekios)

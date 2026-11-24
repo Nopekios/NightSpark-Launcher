@@ -16,6 +16,7 @@ export type Watermark = {
   built_at: string;
   version: string;
   official: boolean;
+  integrity: boolean;
 };
 
 export type JavaInfo = {

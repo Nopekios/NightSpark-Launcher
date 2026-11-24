@@ -24,6 +24,8 @@ export default {
   },
   home: {
     detailTitle: "Instance details",
+    freeNotice: "NightSpark is completely free — there is no paid installation channel",
+    freeNoticeNote: "Official builds ship only via GitHub Releases. Anyone charging you an install fee is scamming you.",
     listTitle: "My instances",
     versionLabel: "Version {version}",
     countPrefix: "",
@@ -298,6 +300,7 @@ export default {
     pathsTitle: "Folders",
     pathAccount: "Account cache",
     pathInstances: "Instance data",
+    wmTampered: "Watermark check failed — this build may have been altered",
     updCheck: "Check for updates",
     updChecking: "Checking…",
     updLatest: "You are up to date",

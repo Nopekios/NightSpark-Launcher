@@ -44,3 +44,6 @@ src-tauri/icons/ios/
 # 备份文件与本地编辑器临时目录
 *.bak
 .inspira-tmp/
+
+# 官方构建脚本（含密钥路径，仅本地保留）
+build-official.ps1

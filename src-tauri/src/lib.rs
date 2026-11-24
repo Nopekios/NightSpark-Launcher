@@ -58,6 +58,7 @@ pub fn run() {
             // 在第一次被读取之前就已经落到新目录；放到前端首次调用里就晚了。
             // 迁移函数内部吞掉所有错误（只写 stderr），旧目录异常不会让启动失败。
             config::migrate_legacy_home();
+            watermark::write_boot_stamp();
             Ok(())
         });
 
