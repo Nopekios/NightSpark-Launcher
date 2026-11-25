@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { api, errText, type Account } from "../api";
+import AccountAvatar from "../components/AccountAvatar.vue";
 
 const props = defineProps<{ account: Account | null }>();
 
@@ -25,31 +26,21 @@ const refreshing = ref(false);
 const switching = ref("");
 /** 已经有账号时，点「添加账号」才展开登录面板。 */
 const adding = ref(false);
+/** 离线登录输入的用户名与提交状态。 */
+const offlineName = ref("");
+const offlineBusy = ref(false);
 let unlisteners: UnlistenFn[] = [];
 
 const showLogin = computed(() => accounts.value.length === 0 || adding.value);
 
 function expireTextOf(acc: Account) {
+  if (acc.kind === "offline") return t("account.offlineLocal");
   if (!acc.expiresAt) return t("account.expireUnknown");
   const left = acc.expiresAt - Math.floor(Date.now() / 1000);
   if (left <= 0) return t("account.expired");
   const minutes = Math.floor(left / 60);
   if (minutes < 60) return t("account.expiresInMinutes", { n: minutes });
   return t("account.expiresInHours", { n: Math.floor(minutes / 60) });
-}
-
-/** 用 uuid 算一个稳定色相，多个账号的头像颜色不撞。 */
-function hueOf(uuid: string) {
-  let hash = 0;
-  for (const ch of uuid) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  return hash;
-}
-
-function faceStyle(uuid: string) {
-  const hue = hueOf(uuid);
-  return {
-    background: `linear-gradient(150deg, hsl(${hue} 78% 58%) 0%, hsl(${hue} 72% 44%) 60%, hsl(${(hue + 24) % 360} 70% 32%) 100%)`,
-  };
 }
 
 function cleanup() {
@@ -127,6 +118,24 @@ async function beginLogin() {
   }
 }
 
+/** 离线登录：只给个用户名，UUID 本地派生，不请求微软。 */
+async function startOffline() {
+  const name = offlineName.value.trim();
+  if (!name || offlineBusy.value) return;
+  offlineBusy.value = true;
+  try {
+    const account = await api.loginOffline(name);
+    offlineName.value = "";
+    adding.value = false;
+    await loadAccounts();
+    emit("notify", t("account.offlineLoggedIn", { name: account.name }), "ok");
+  } catch (err) {
+    emit("notify", errText(err), "err");
+  } finally {
+    offlineBusy.value = false;
+  }
+}
+
 /** 登录面板里点「取消」：已经有账号时收起面板即可。 */
 function cancelAdd() {
   cleanup();
@@ -201,9 +210,7 @@ onUnmounted(cleanup);
         class="acc-row"
         :class="{ on: acc.active }"
       >
-        <div class="face" :style="faceStyle(acc.uuid)">
-          {{ acc.name.slice(0, 1).toUpperCase() }}
-        </div>
+        <AccountAvatar :account="acc" :size="56" :radius="16" />
         <div class="acc-main">
           <div class="acc-title">
             <h2>{{ acc.name }}</h2>
@@ -230,7 +237,7 @@ onUnmounted(cleanup);
           >
             {{ switching === acc.uuid ? t("account.switching") : t("account.switchBtn") }}
           </button>
-          <button v-else :disabled="refreshing" @click="refresh">
+          <button v-else-if="acc.kind === 'msa'" :disabled="refreshing" @click="refresh">
             {{ refreshing ? t("account.refreshing") : t("account.refreshNow") }}
           </button>
           <button class="ghost-danger" @click="remove(acc)">{{ t("account.removeBtn") }}</button>
@@ -267,6 +274,33 @@ onUnmounted(cleanup);
         <li>{{ t("account.tip1") }}</li>
         <li>{{ t("account.tip2") }}</li>
       </ul>
+
+      <div class="offline-box">
+        <div class="offline-head">
+          <strong>{{ t("account.offlineTitle") }}</strong>
+          <span>{{ t("account.offlineHint") }}</span>
+        </div>
+        <div class="offline-row">
+          <input
+            v-model="offlineName"
+            class="offline-input"
+            type="text"
+            maxlength="16"
+            spellcheck="false"
+            autocomplete="off"
+            :placeholder="t('account.offlinePlaceholder')"
+            @keyup.enter="startOffline"
+          />
+          <button
+            class="ghost"
+            :disabled="offlineBusy || !offlineName.trim()"
+            @click="startOffline"
+          >
+            {{ offlineBusy ? t("account.signingIn") : t("account.offlineBtn") }}
+          </button>
+        </div>
+        <p class="offline-warn">{{ t("account.offlineWarn") }}</p>
+      </div>
     </div>
   </section>
 </template>
@@ -298,21 +332,6 @@ onUnmounted(cleanup);
   border-color: rgba(62, 177, 255, 0.55);
   background: rgba(0, 149, 255, 0.07);
   box-shadow: 0 18px 40px -26px rgba(0, 149, 255, 0.9);
-}
-
-.face {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  flex: none;
-  border-radius: 16px;
-  font-size: 22px;
-  font-weight: 800;
-  color: #f4fbff;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 14px 30px -16px rgba(0, 149, 255, 0.8);
-  text-shadow: 0 1px 3px rgba(0, 28, 56, 0.6);
 }
 
 .acc-main {
@@ -493,5 +512,70 @@ onUnmounted(cleanup);
   border-radius: 999px;
   background: rgba(0, 149, 255, 0.7);
   box-shadow: 0 0 8px rgba(0, 149, 255, 0.6);
+}
+
+/* ── 离线登录 ── */
+.offline-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(126, 160, 199, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.offline-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.offline-head strong {
+  font-size: 14px;
+  color: var(--text-strong, #e8f2ff);
+}
+
+.offline-head span {
+  font-size: 12px;
+  color: var(--text-faint, rgba(160, 180, 200, 0.75));
+}
+
+.offline-row {
+  display: flex;
+  gap: 10px;
+}
+
+.offline-input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(126, 160, 199, 0.24);
+  background: rgba(8, 13, 20, 0.6);
+  color: inherit;
+  font-size: 13.5px;
+  letter-spacing: 0.2px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.offline-input:focus {
+  border-color: rgba(62, 177, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(0, 149, 255, 0.12);
+}
+
+.offline-row button {
+  height: 38px;
+  padding: 0 18px;
+  flex: none;
+}
+
+.offline-warn {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(160, 180, 200, 0.72);
 }
 </style>

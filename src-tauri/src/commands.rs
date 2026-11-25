@@ -268,6 +268,7 @@ pub async fn exchange_code(app: tauri::AppHandle, code: String) -> Result<auth::
         access_token: Some(mc_token),
         refresh_token: msa.refresh_token,
         expires_at: Some(auth::now_secs() + expires_in as i64),
+        kind: auth::AccountKind::Msa,
     };
     auth::save_account(&account)?;
     emit_progress(&app, "登录完成");
@@ -306,6 +307,11 @@ pub async fn remove_account(app: tauri::AppHandle, uuid: String) -> Result<(), A
 pub async fn refresh_account(app: tauri::AppHandle) -> Result<auth::AccountView, AppError> {
     let current = auth::load_account()?
         .ok_or_else(|| AppError::NotFound("本地没有已登录账号".to_string()))?;
+    if current.kind == auth::AccountKind::Offline {
+        return Err(AppError::Config(
+            "离线账号没有可续期的令牌，不需要刷新".to_string(),
+        ));
+    }
     let refreshed = auth::refresh_account(&current).await?;
     auth::update_account_silently(&refreshed)?;
     emit_accounts_changed(&app);
@@ -317,6 +323,35 @@ pub async fn logout(app: tauri::AppHandle) -> Result<(), AppError> {
     auth::clear_account()?;
     emit_accounts_changed(&app);
     Ok(())
+}
+
+/// 离线登录：只在本地造一个用户名 + 派生 UUID，不请求任何 Mojang 接口。
+/// 它没有真实的正版凭据，进 online-mode=true 的服务器会被服务端正常拒绝，
+/// 只能进关闭了正版验证的服务器——这不叫绕过正版验证。
+#[tauri::command]
+pub async fn login_offline(app: tauri::AppHandle, name: String) -> Result<auth::AccountView, AppError> {
+    let account = auth::create_offline_account(&name)?;
+    auth::save_account(&account)?;
+    emit_accounts_changed(&app);
+    Ok(auth::AccountView::of(&account, true))
+}
+
+/// 取账号头像（Minecraft 皮肤头部）的 data URL。force=true 时跳过磁盘缓存重新抓。
+#[tauri::command]
+pub async fn account_avatar(uuid: String, force: Option<bool>) -> Result<String, AppError> {
+    let store = auth::load_store()?;
+    let found = store
+        .accounts
+        .iter()
+        .find(|a| a.uuid.eq_ignore_ascii_case(&uuid));
+    let (name, kind) = match found {
+        Some(account) => (account.name.clone(), account.kind),
+        None => (uuid.clone(), auth::AccountKind::Offline),
+    };
+    if force.unwrap_or(false) {
+        crate::skin::clear_avatar_cache(&uuid);
+    }
+    Ok(crate::skin::avatar_data_url(&uuid, &name, kind).await)
 }
 
 use crate::download;
@@ -390,6 +425,10 @@ pub async fn launch_instance(
     let target = find_instance(&id)?;
     let mut account = auth::load_account()?
         .ok_or_else(|| AppError::NotFound("还没有登录微软账号".to_string()))?;
+    // 离线账号没有可续期的令牌：令牌固定为占位值 "0"，本地直接放行启动。
+    if account.kind == auth::AccountKind::Offline && account.access_token.is_none() {
+        account.access_token = Some("0".to_string());
+    }
     // 令牌临近过期时先续期，避免带着过期 token 启动被服务端踢回。
     if account.refresh_token.is_some() {
         if let Ok(fresh) = auth::get_valid_token(&account).await {

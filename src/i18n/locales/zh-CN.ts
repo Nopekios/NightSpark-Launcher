@@ -161,6 +161,14 @@ export default {
     refreshNow: "立即刷新",
     autoRenewOn: "已保存（后台自动续期）",
     autoRenewHint: "令牌在后台自动续期，正常使用不需要手动刷新；只有账号被微软强制下线时才需要重新登录。",
+    offlineTitle: "离线登录",
+    offlineHint: "只用本地用户名，不连微软",
+    offlinePlaceholder: "输入用户名（3-16 位字母/数字/下划线）",
+    offlineBtn: "创建离线账号",
+    offlineLoggedIn: "已添加离线账号 {name}",
+    offlineLocal: "离线账号（本地生成）",
+    offlineWarn:
+      "离线账号只有本地派生的 UUID，没有正版凭据：可以单机、可以进关闭正版验证的服务器；开正版验证的服务器会拒绝它，这是服务端的正常校验，不会绕过。",
   },
   download: {
     tabVanilla: "官方版本",

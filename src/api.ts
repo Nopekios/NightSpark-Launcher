@@ -24,6 +24,9 @@ export type JavaInfo = {
   version: string;
 };
 
+/** 账号类型：msa = 正版微软账号，offline = 纯本地离线账号。 */
+export type AccountKind = "msa" | "offline";
+
 export type Account = {
   uuid: string;
   name: string;
@@ -31,6 +34,7 @@ export type Account = {
   hasRefreshToken: boolean;
   /** 是否是当前正在用的账号（启动游戏取它的令牌）。 */
   active: boolean;
+  kind: AccountKind;
 };
 
 export type VersionEntry = {
@@ -226,6 +230,11 @@ export const api = {
   switchAccount: (uuid: string) => invoke<Account>("switch_account", { uuid }),
   removeAccount: (uuid: string) => invoke<void>("remove_account", { uuid }),
   refreshAccount: () => invoke<Account>("refresh_account"),
+  /** 离线登录：只本地生成用户名 + UUID，不碰微软。 */
+  loginOffline: (name: string) => invoke<Account>("login_offline", { name }),
+  /** 取账号头像（Minecraft 皮肤头部）的 data URL。 */
+  accountAvatar: (uuid: string, force = false) =>
+    invoke<string>("account_avatar", { uuid, force }),
   logout: () => invoke<void>("logout"),
 
   /** 账号库变动（登录 / 切换 / 移除 / 后台自动续期）时推送完整列表。 */

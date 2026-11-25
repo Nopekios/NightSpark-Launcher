@@ -19,6 +19,20 @@ const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
 
+/// 账号类型：正版微软账号，或者纯本地离线账号。
+///
+/// 离线账号只生成一个本地用户名 + 派生 UUID，access_token 固定写成 "0"，
+/// 不去碰任何 Mojang 接口。这样它天然进不了开启正版验证的服务器（服务端会
+/// 拿这个 token 去 session server 校验并失败），能进的只有 online-mode=false
+/// 的服务器——这正是离线登录本来的语义，不是绕过正版验证。
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum AccountKind {
+    #[default]
+    Msa,
+    Offline,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
@@ -27,6 +41,9 @@ pub struct Account {
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
     pub expires_at: Option<i64>,
+    /// 老版本账号文件没有这个字段，缺省按正版账号处理。
+    #[serde(default)]
+    pub kind: AccountKind,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -38,6 +55,8 @@ pub struct AccountView {
     pub has_refresh_token: bool,
     /// 是否是当前正在使用（启动游戏时取它的令牌）的账号。
     pub active: bool,
+    /// "msa" 或 "offline"，前端据此决定头像与文案。
+    pub kind: AccountKind,
 }
 
 impl AccountView {
@@ -48,8 +67,59 @@ impl AccountView {
             expires_at: account.expires_at,
             has_refresh_token: account.refresh_token.is_some(),
             active,
+            kind: account.kind,
         }
     }
+}
+
+/// 离线 UUID：按 Java 版 `UUID.nameUUIDFromBytes(("OfflinePlayer:" + name))`
+/// 的算法生成（MD5 派生 UUID v3），这样同一名字在别的启动器里也认得出是同一个身份。
+pub fn offline_uuid(name: &str) -> String {
+    use md5::{Digest, Md5};
+
+    let mut hasher = Md5::new();
+    hasher.update(format!("OfflinePlayer:{name}").as_bytes());
+    let mut bytes: [u8; 16] = hasher.finalize().into();
+    // UUID v3 + RFC 4122 variant
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+    )
+}
+
+/// 离线用户名规则跟正版一致：3-16 位，只允许字母、数字、下划线。
+pub fn validate_offline_name(name: &str) -> Result<String, AppError> {
+    let trimmed = name.trim();
+    if !(3..=16).contains(&trimmed.chars().count()) {
+        return Err(AppError::Config(
+            "离线用户名长度需要 3-16 个字符".to_string(),
+        ));
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err(AppError::Config(
+            "离线用户名只能包含字母、数字和下划线".to_string(),
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// 造一个离线账号：本地生成 UUID，令牌写死 "0"，不请求任何在线接口。
+pub fn create_offline_account(name: &str) -> Result<Account, AppError> {
+    let name = validate_offline_name(name)?;
+    Ok(Account {
+        uuid: offline_uuid(&name),
+        name,
+        access_token: Some("0".to_string()),
+        refresh_token: None,
+        expires_at: None,
+        kind: AccountKind::Offline,
+    })
 }
 
 /// 本地账号库：一台设备可以存多个微软账号，同一时刻只有一个 active。
@@ -394,6 +464,7 @@ async fn account_from_msa(msa: MsaToken) -> Result<Account, AppError> {
         access_token: Some(mc_token),
         refresh_token: msa.refresh_token,
         expires_at: Some(now_secs() + expires_in as i64),
+        kind: AccountKind::Msa,
     })
 }
 
@@ -407,6 +478,13 @@ pub async fn refresh_account(account: &Account) -> Result<Account, AppError> {
 }
 
 pub async fn get_valid_token(account: &Account) -> Result<String, AppError> {
+    // 离线账号没有可续期的令牌，直接用写死的 "0"。
+    if account.kind == AccountKind::Offline {
+        return Ok(account
+            .access_token
+            .clone()
+            .unwrap_or_else(|| "0".to_string()));
+    }
     if let (Some(token), Some(expires_at)) = (account.access_token.as_deref(), account.expires_at) {
         if now_secs() + 120 < expires_at {
             return Ok(token.to_string());
@@ -578,5 +656,52 @@ mod live_tests {
             message.contains("invalid_grant") || message.contains("invalid_request"),
             "刷新参数可能不合法: {message}"
         );
+    }
+}
+
+#[cfg(test)]
+mod offline_tests {
+    use super::*;
+
+    /// 和 Java 的 UUID.nameUUIDFromBytes(("OfflinePlayer:"+name)) 对齐：
+    /// 业界（HMCL/PCL）对 "Notch" 的离线 UUID 就是下面这个值。
+    #[test]
+    fn offline_uuid_matches_java_uuid_v3() {
+        assert_eq!(offline_uuid("Notch"), "b50ad385-829d-3141-a216-7e7d7539ba7f");
+        assert_eq!(offline_uuid("Player"), "a01e3843-e521-3998-958a-f459800e4d11");
+    }
+
+    #[test]
+    fn offline_account_has_no_online_credentials() {
+        let account = create_offline_account("  baby  ").expect("合法用户名应该能建离线账号");
+        assert_eq!(account.name, "baby");
+        assert_eq!(account.uuid, offline_uuid("baby"));
+        assert_eq!(account.access_token.as_deref(), Some("0"));
+        assert!(account.refresh_token.is_none());
+        assert!(account.expires_at.is_none());
+        assert_eq!(account.kind, AccountKind::Offline);
+    }
+
+    #[test]
+    fn offline_name_is_validated() {
+        assert!(create_offline_account("ab").is_err());
+        assert!(create_offline_account("way_too_long_name_x").is_err());
+        assert!(create_offline_account("中文名").is_err());
+        assert!(create_offline_account("ok_name9").is_ok());
+    }
+
+    /// 老账号文件没有 kind 字段，必须默认成正版账号，不能把老用户踢成离线。
+    #[test]
+    fn legacy_account_json_defaults_to_msa() {
+        let json = r#"{"uuid":"x","name":"n","accessToken":null,"refreshToken":null,"expiresAt":null}"#;
+        let account: Account = serde_json::from_str(json).unwrap();
+        assert_eq!(account.kind, AccountKind::Msa);
+    }
+
+    #[tokio::test]
+    async fn offline_token_never_touches_network() {
+        let account = create_offline_account("baby").unwrap();
+        let token = get_valid_token(&account).await.unwrap();
+        assert_eq!(token, "0");
     }
 }

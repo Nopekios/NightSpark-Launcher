@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 
-use crate::auth::Account;
+use crate::auth::{Account, AccountKind};
 use crate::download::{self, ArgValue, VersionMeta};
 use crate::error::AppError;
 use crate::instance::Instance;
@@ -180,7 +180,14 @@ fn build_command(
     vars.insert("auth_uuid", account.uuid.clone());
     vars.insert("auth_access_token", token.clone());
     vars.insert("auth_session", format!("token:{token}"));
-    vars.insert("user_type", "msa".to_string());
+    // 离线账号走 legacy 认证模式：客户端只带上本地 UUID 和占位令牌，
+    // 不提供实时正版凭据。进 online-mode=true 的服务器会被服务端校验拒绝，
+    // 能正常进的只有关闭正版验证的服务器，这就是离线登录应有的边界。
+    let user_type = match account.kind {
+        AccountKind::Offline => "legacy",
+        AccountKind::Msa => "msa",
+    };
+    vars.insert("user_type", user_type.to_string());
     vars.insert("user_properties", "{}".to_string());
     vars.insert("clientid", String::new());
     vars.insert("auth_xuid", String::new());
@@ -443,6 +450,7 @@ mod live_tests {
             access_token: Some("fake-token-for-arg-check".to_string()),
             refresh_token: None,
             expires_at: None,
+            kind: AccountKind::Msa,
         };
         let cfg = LaunchConfig {
             java_path: java,
@@ -501,6 +509,7 @@ mod live_tests {
             access_token: Some("fake-token".to_string()),
             refresh_token: None,
             expires_at: None,
+            kind: AccountKind::Msa,
         };
         let cfg = LaunchConfig {
             java_path: java,
@@ -554,6 +563,7 @@ mod live_tests {
             access_token: Some("fake-token-for-arg-check".to_string()),
             refresh_token: None,
             expires_at: None,
+            kind: AccountKind::Msa,
         };
         let cfg = LaunchConfig {
             java_path: java,

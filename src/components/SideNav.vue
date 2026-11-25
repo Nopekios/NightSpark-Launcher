@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { Account } from "../api";
+import AccountAvatar from "./AccountAvatar.vue";
 
 type ViewKey = "home" | "download" | "account" | "settings";
 
@@ -31,11 +32,6 @@ const items = computed<Array<{ key: ViewKey; label: string; hint: string; icon: 
   { key: "settings", label: t("nav.settings"), hint: t("nav.settingsHint"), icon: iconOf.settings },
 ]);
 
-function hueOf(uuid: string): number {
-  let sum = 0;
-  for (const ch of uuid) sum = (sum + ch.charCodeAt(0)) % 360;
-  return sum;
-}
 </script>
 
 <template>
@@ -74,14 +70,7 @@ function hueOf(uuid: string): number {
     </nav>
 
     <button class="account-chip" @click="emit('navigate', 'account')">
-      <span
-        v-if="account"
-        class="avatar"
-        :style="{ background: `linear-gradient(135deg, hsl(${hueOf(account.uuid)} 70% 52%), hsl(${(hueOf(account.uuid) + 40) % 360} 70% 38%))` }"
-      >
-        {{ account.name.slice(0, 1).toUpperCase() }}
-      </span>
-      <span v-else class="avatar empty">?</span>
+      <AccountAvatar :account="account" :size="32" :radius="10" />
       <span class="account-meta">
         <strong>{{ account ? account.name : t("nav.notLoggedIn") }}</strong>
         <em>{{ account ? t("nav.connected") : t("nav.bindAccount") }}</em>
@@ -281,28 +270,6 @@ function hueOf(uuid: string): number {
 .account-chip:hover:not(:disabled) {
   border-color: rgba(0, 149, 255, 0.34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 26px -14px rgba(0, 149, 255, 0.7);
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  font-weight: 800;
-  color: #05121c;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-
-.avatar.empty {
-  color: var(--text-faint);
-  background: rgba(126, 160, 199, 0.1);
-  border-color: rgba(126, 160, 199, 0.18);
-  box-shadow: none;
-  font-weight: 700;
 }
 
 .account-meta {

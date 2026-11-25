@@ -8,6 +8,7 @@ mod instance;
 mod java;
 mod launch;
 mod market;
+mod skin;
 mod net;
 mod watermark;
 
@@ -40,6 +41,8 @@ pub fn run() {
             commands::remove_account,
             commands::refresh_account,
             commands::logout,
+            commands::login_offline,
+            commands::account_avatar,
             commands::get_config,
             commands::save_config,
             commands::fetch_version_list,

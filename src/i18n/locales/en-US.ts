@@ -161,6 +161,14 @@ export default {
     refreshNow: "Refresh now",
     autoRenewOn: "Saved (auto-renewing)",
     autoRenewHint: "Tokens renew themselves in the background, so manual refresh is never needed. Only re-login if Microsoft revokes the account.",
+    offlineTitle: "Offline login",
+    offlineHint: "Local username only, no Microsoft account",
+    offlinePlaceholder: "Username (3-16 letters, digits or underscore)",
+    offlineBtn: "Create offline account",
+    offlineLoggedIn: "Offline account {name} added",
+    offlineLocal: "Offline account (generated locally)",
+    offlineWarn:
+      "An offline account only has a locally derived UUID and no genuine credentials: it works in singleplayer and on servers with online-mode disabled. Servers with online-mode enabled will reject it — that check belongs to the server and is not bypassed.",
   },
   download: {
     tabVanilla: "Official versions",
