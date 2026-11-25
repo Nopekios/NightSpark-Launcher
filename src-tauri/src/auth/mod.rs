@@ -36,15 +36,76 @@ pub struct AccountView {
     pub name: String,
     pub expires_at: Option<i64>,
     pub has_refresh_token: bool,
+    /// 是否是当前正在使用（启动游戏时取它的令牌）的账号。
+    pub active: bool,
 }
 
-impl From<&Account> for AccountView {
-    fn from(account: &Account) -> Self {
+impl AccountView {
+    pub fn of(account: &Account, active: bool) -> Self {
         Self {
             uuid: account.uuid.clone(),
             name: account.name.clone(),
             expires_at: account.expires_at,
             has_refresh_token: account.refresh_token.is_some(),
+            active,
+        }
+    }
+}
+
+/// 本地账号库：一台设备可以存多个微软账号，同一时刻只有一个 active。
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountStore {
+    #[serde(default)]
+    pub active_uuid: Option<String>,
+    #[serde(default)]
+    pub accounts: Vec<Account>,
+}
+
+impl AccountStore {
+    pub fn active(&self) -> Option<&Account> {
+        let uuid = self.active_uuid.as_deref()?;
+        self.accounts.iter().find(|a| a.uuid.eq_ignore_ascii_case(uuid))
+    }
+
+    pub fn views(&self) -> Vec<AccountView> {
+        self.accounts
+            .iter()
+            .map(|account| {
+                let active = self
+                    .active_uuid
+                    .as_deref()
+                    .map(|uuid| uuid.eq_ignore_ascii_case(&account.uuid))
+                    .unwrap_or(false);
+                AccountView::of(account, active)
+            })
+            .collect()
+    }
+
+    /// 同一个 uuid 视为同一账号（重新登录即覆盖），按 uuid 去重。
+    pub fn upsert(&mut self, account: &Account, make_active: bool) {
+        match self
+            .accounts
+            .iter_mut()
+            .find(|a| a.uuid.eq_ignore_ascii_case(&account.uuid))
+        {
+            Some(slot) => *slot = account.clone(),
+            None => self.accounts.push(account.clone()),
+        }
+        if make_active || self.active_uuid.is_none() {
+            self.active_uuid = Some(account.uuid.clone());
+        }
+    }
+
+    /// active 指向的账号被删掉后，落到剩下的第一个账号上。
+    fn repair_active(&mut self) {
+        let valid = self.active_uuid.as_deref().is_some_and(|uuid| {
+            self.accounts
+                .iter()
+                .any(|a| a.uuid.eq_ignore_ascii_case(uuid))
+        });
+        if !valid {
+            self.active_uuid = self.accounts.first().map(|a| a.uuid.clone());
         }
     }
 }
@@ -352,47 +413,127 @@ pub async fn get_valid_token(account: &Account) -> Result<String, AppError> {
         }
     }
     let refreshed = refresh_account(account).await?;
-    save_account(&refreshed)?;
+    update_account_silently(&refreshed)?;
     refreshed
         .access_token
         .ok_or_else(|| AppError::Internal("刷新后仍未拿到 Minecraft access_token".to_string()))
 }
 
-fn account_path() -> Result<PathBuf, AppError> {
+fn home_dir() -> Result<PathBuf, AppError> {
     let dir = dirs::config_dir()
         .ok_or_else(|| AppError::Internal("无法获取系统 config 目录".to_string()))?;
-    Ok(dir.join("NightSpark").join("account.json"))
+    Ok(dir.join("NightSpark"))
 }
 
-pub fn load_account() -> Result<Option<Account>, AppError> {
-    let path = account_path()?;
-    if !path.exists() {
-        return Ok(None);
+fn store_path() -> Result<PathBuf, AppError> {
+    Ok(home_dir()?.join("accounts.json"))
+}
+
+/// 0.1.0 时代的单账号文件，只在首次读取时做一次性迁移。
+fn legacy_account_path() -> Result<PathBuf, AppError> {
+    Ok(home_dir()?.join("account.json"))
+}
+
+pub fn load_store() -> Result<AccountStore, AppError> {
+    let path = store_path()?;
+    if path.exists() {
+        let raw = std::fs::read_to_string(&path)?;
+        let mut store = serde_json::from_str::<AccountStore>(&raw).map_err(|e| {
+            AppError::Config(format!("解析本地账号失败（{}）: {e}", path.display()))
+        })?;
+        store.repair_active();
+        return Ok(store);
     }
-    let raw = std::fs::read_to_string(&path)?;
-    let account = serde_json::from_str::<Account>(&raw).map_err(|e| {
-        AppError::Config(format!("解析本地账号失败（{}）: {e}", path.display()))
-    })?;
-    Ok(Some(account))
+
+    // 旧版单账号文件迁移：迁移成功后把原文件改名为 .bak，避免下次重复迁移。
+    let legacy = legacy_account_path()?;
+    if legacy.exists() {
+        let raw = std::fs::read_to_string(&legacy)?;
+        if let Ok(account) = serde_json::from_str::<Account>(&raw) {
+            let mut store = AccountStore::default();
+            store.upsert(&account, true);
+            save_store(&store)?;
+            let _ = std::fs::rename(&legacy, legacy.with_extension("json.bak"));
+            return Ok(store);
+        }
+    }
+
+    Ok(AccountStore::default())
 }
 
-pub fn save_account(account: &Account) -> Result<(), AppError> {
-    let path = account_path()?;
+pub fn save_store(store: &AccountStore) -> Result<(), AppError> {
+    let path = store_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let json = serde_json::to_string_pretty(account)
+    let json = serde_json::to_string_pretty(store)
         .map_err(|e| AppError::Config(format!("序列化账号失败: {e}")))?;
-    std::fs::write(&path, json)?;
+    // 先写临时文件再替换，避免写一半掉电把账号库写坏。
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 
+/// 当前使用的账号（启动游戏、界面展示都取它）。
+pub fn load_account() -> Result<Option<Account>, AppError> {
+    Ok(load_store()?.active().cloned())
+}
+
+pub fn list_accounts() -> Result<Vec<AccountView>, AppError> {
+    Ok(load_store()?.views())
+}
+
+/// 登录成功后落库：按 uuid 覆盖或新增，并把新账号设为当前账号。
+pub fn save_account(account: &Account) -> Result<(), AppError> {
+    let mut store = load_store()?;
+    store.upsert(account, true);
+    save_store(&store)
+}
+
+/// 后台静默刷新落库：不改变当前账号，避免刷新把用户手选的账号顶掉。
+pub fn update_account_silently(account: &Account) -> Result<(), AppError> {
+    let mut store = load_store()?;
+    store.upsert(account, false);
+    save_store(&store)
+}
+
+pub fn switch_account(uuid: &str) -> Result<AccountView, AppError> {
+    let mut store = load_store()?;
+    let target = store
+        .accounts
+        .iter()
+        .find(|a| a.uuid.eq_ignore_ascii_case(uuid))
+        .cloned()
+        .ok_or_else(|| AppError::NotFound("本地账号库里没有这个账号".to_string()))?;
+    store.active_uuid = Some(target.uuid.clone());
+    save_store(&store)?;
+    Ok(AccountView::of(&target, true))
+}
+
+pub fn remove_account(uuid: &str) -> Result<(), AppError> {
+    let mut store = load_store()?;
+    store
+        .accounts
+        .retain(|a| !a.uuid.eq_ignore_ascii_case(uuid));
+    store.repair_active();
+    save_store(&store)
+}
+
+/// 退出登录：移除当前账号，其它账号保留。
 pub fn clear_account() -> Result<(), AppError> {
-    let path = account_path()?;
-    if path.exists() {
-        std::fs::remove_file(&path)?;
+    match load_store()?.active_uuid {
+        Some(uuid) => remove_account(&uuid),
+        None => Ok(()),
     }
-    Ok(())
+}
+
+/// 令牌是否需要在过期前提前刷新（留 5 分钟余量，避免启动瞬间过期）。
+pub fn needs_refresh(account: &Account) -> bool {
+    match account.expires_at {
+        Some(expires_at) => now_secs() + 300 >= expires_at,
+        None => account.access_token.is_none(),
+    }
 }
 
 #[cfg(test)]

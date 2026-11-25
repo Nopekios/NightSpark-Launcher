@@ -35,6 +35,9 @@ pub fn run() {
             commands::start_login,
             commands::exchange_code,
             commands::get_account,
+            commands::list_accounts,
+            commands::switch_account,
+            commands::remove_account,
             commands::refresh_account,
             commands::logout,
             commands::get_config,
@@ -59,6 +62,10 @@ pub fn run() {
             // 迁移函数内部吞掉所有错误（只写 stderr），旧目录异常不会让启动失败。
             config::migrate_legacy_home();
             watermark::write_boot_stamp();
+
+            // 账号令牌后台自动续期，前端不再需要手动点刷新。
+            let handle = _app.handle().clone();
+            tauri::async_runtime::spawn(commands::auto_refresh_accounts_loop(handle));
             Ok(())
         });
 

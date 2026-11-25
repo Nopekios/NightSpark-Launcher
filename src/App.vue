@@ -49,6 +49,7 @@ let unlistenDrop: (() => void) | null = null;
 const dropActive = ref(false);
 let unlistenProgress: (() => void) | null = null;
 let unlistenLoader: (() => void) | null = null;
+let unlistenAccounts: (() => void) | null = null;
 
 function notify(text: string, tone: "ok" | "err" = "ok") {
   toast.value = { text, tone };
@@ -420,6 +421,10 @@ onMounted(async () => {
   }
   unlistenProgress = await api.onInstallProgress(showTask);
   unlistenLoader = await api.onLoaderProgress(showTask);
+  // 账号库变动（登录别的账号、切换、移除、后台静默续期）时同步侧栏显示的当前账号。
+  unlistenAccounts = await api.onAccountsChanged((list) => {
+    account.value = list.find((item) => item.active) ?? null;
+  });
   unlistenExit = await api.onGameExit((pid) => {
     const hit = Object.entries(runningPids.value).find(([, value]) => value === pid);
     runningPids.value = Object.fromEntries(
@@ -441,6 +446,7 @@ onUnmounted(() => {
   unlistenDrop?.();
   unlistenProgress?.();
   unlistenLoader?.();
+  unlistenAccounts?.();
   stopLogFollow();
   window.clearTimeout(taskTimer);
 });

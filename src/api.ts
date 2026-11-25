@@ -29,6 +29,8 @@ export type Account = {
   name: string;
   expiresAt: number | null;
   hasRefreshToken: boolean;
+  /** 是否是当前正在用的账号（启动游戏取它的令牌）。 */
+  active: boolean;
 };
 
 export type VersionEntry = {
@@ -220,8 +222,15 @@ export const api = {
   startLogin: () => invoke<void>("start_login"),
   exchangeCode: (code: string) => invoke<Account>("exchange_code", { code }),
   getAccount: () => invoke<Account | null>("get_account"),
+  listAccounts: () => invoke<Account[]>("list_accounts"),
+  switchAccount: (uuid: string) => invoke<Account>("switch_account", { uuid }),
+  removeAccount: (uuid: string) => invoke<void>("remove_account", { uuid }),
   refreshAccount: () => invoke<Account>("refresh_account"),
   logout: () => invoke<void>("logout"),
+
+  /** 账号库变动（登录 / 切换 / 移除 / 后台自动续期）时推送完整列表。 */
+  onAccountsChanged: (cb: (accounts: Account[]) => void): Promise<UnlistenFn> =>
+    listen<Account[]>("accounts-changed", (event) => cb(event.payload)),
 
   getConfig: () => invoke<LauncherConfig>("get_config"),
   saveConfig: (cfg: LauncherConfig) => invoke<void>("save_config", { cfg }),

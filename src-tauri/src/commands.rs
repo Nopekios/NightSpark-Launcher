@@ -133,6 +133,44 @@ fn emit_progress(app: &tauri::AppHandle, message: &str) {
     let _ = app.emit(LOGIN_PROGRESS_EVENT, message.to_string());
 }
 
+/// 账号库变化（登录、切换、移除、后台刷新）统一广播，前端据此刷新账号列表。
+const ACCOUNTS_CHANGED_EVENT: &str = "accounts-changed";
+
+fn emit_accounts_changed(app: &tauri::AppHandle) {
+    if let Ok(list) = auth::list_accounts() {
+        let _ = app.emit(ACCOUNTS_CHANGED_EVENT, list);
+    }
+}
+
+/// 后台静默续期：每 5 分钟扫一遍账号库，把剩余有效期不足 5 分钟的账号刷新掉。
+/// 这样用户从不需要手点"刷新令牌"，只有在 refresh_token 本身失效时才需要重新登录。
+pub async fn auto_refresh_accounts_loop(app: tauri::AppHandle) {
+    loop {
+        let store = auth::load_store();
+        if let Ok(store) = store {
+            let mut changed = false;
+            for account in store.accounts.clone() {
+                if account.refresh_token.is_none() || !auth::needs_refresh(&account) {
+                    continue;
+                }
+                match auth::refresh_account(&account).await {
+                    Ok(fresh) => {
+                        if auth::update_account_silently(&fresh).is_ok() {
+                            changed = true;
+                        }
+                    }
+                    // 刷新失败（网络抖动或 refresh_token 吊销）不打断循环，下次再试。
+                    Err(err) => eprintln!("自动刷新令牌失败（{}）: {err}", account.name),
+                }
+            }
+            if changed {
+                emit_accounts_changed(&app);
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+    }
+}
+
 // 回调地址固定是 https://login.live.com/oauth20_desktop.srf，微软把 code 拼在 query 上。
 fn parse_callback(url: &tauri::Url) -> Option<Result<String, String>> {
     let is_callback =
@@ -233,29 +271,52 @@ pub async fn exchange_code(app: tauri::AppHandle, code: String) -> Result<auth::
     };
     auth::save_account(&account)?;
     emit_progress(&app, "登录完成");
-    Ok(auth::AccountView::from(&account))
+    // 其它窗口（侧栏）靠这个事件同步账号状态，多账号登录完也能立刻看到。
+    emit_accounts_changed(&app);
+    Ok(auth::AccountView::of(&account, true))
 }
 
 #[tauri::command]
-pub async fn get_account() -> Result<Option<auth::AccountView>, AppError> {
-    match auth::load_account()? {
-        Some(account) => Ok(Some(auth::AccountView::from(&account))),
-        None => Ok(None),
-    }
+pub async fn get_account(app: tauri::AppHandle) -> Result<Option<auth::AccountView>, AppError> {
+    let _ = &app;
+    Ok(auth::list_accounts()?.into_iter().find(|a| a.active))
 }
 
 #[tauri::command]
-pub async fn refresh_account() -> Result<auth::AccountView, AppError> {
+pub async fn list_accounts(app: tauri::AppHandle) -> Result<Vec<auth::AccountView>, AppError> {
+    let _ = &app;
+    auth::list_accounts()
+}
+
+#[tauri::command]
+pub async fn switch_account(app: tauri::AppHandle, uuid: String) -> Result<auth::AccountView, AppError> {
+    let view = auth::switch_account(&uuid)?;
+    emit_accounts_changed(&app);
+    Ok(view)
+}
+
+#[tauri::command]
+pub async fn remove_account(app: tauri::AppHandle, uuid: String) -> Result<(), AppError> {
+    auth::remove_account(&uuid)?;
+    emit_accounts_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn refresh_account(app: tauri::AppHandle) -> Result<auth::AccountView, AppError> {
     let current = auth::load_account()?
         .ok_or_else(|| AppError::NotFound("本地没有已登录账号".to_string()))?;
     let refreshed = auth::refresh_account(&current).await?;
-    auth::save_account(&refreshed)?;
-    Ok(auth::AccountView::from(&refreshed))
+    auth::update_account_silently(&refreshed)?;
+    emit_accounts_changed(&app);
+    Ok(auth::AccountView::of(&refreshed, true))
 }
 
 #[tauri::command]
-pub async fn logout() -> Result<(), AppError> {
-    auth::clear_account()
+pub async fn logout(app: tauri::AppHandle) -> Result<(), AppError> {
+    auth::clear_account()?;
+    emit_accounts_changed(&app);
+    Ok(())
 }
 
 use crate::download;
