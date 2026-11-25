@@ -853,17 +853,21 @@ async fn install_binary_loader(
     let mut succeeded = false;
     for attempt in 1..=INSTALLER_ATTEMPTS {
         progress("installer", 0, 1);
-        let output = tokio::process::Command::new(&java)
-            .arg("-jar")
+        let mut cmd = tokio::process::Command::new(&java);
+        cmd.arg("-jar")
             .arg(&installer_path)
             .arg("--installClient")
             .arg(&work_dir)
-            .current_dir(&tmp_dir)
-            .output()
-            .await
-            .map_err(|err| {
-                AppError::Internal(format!("启动 Java ({}) 失败：{err}", java.display()))
-            })?;
+            .current_dir(&tmp_dir);
+        // 安装器是控制台程序，不加这个标志 Windows 会为它弹出一个黑框窗口。
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let output = cmd.output().await.map_err(|err| {
+            AppError::Internal(format!("启动 Java ({}) 失败：{err}", java.display()))
+        })?;
         progress("installer", 1, 1);
         if output.status.success() {
             succeeded = true;

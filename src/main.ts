@@ -24,3 +24,24 @@ if (import.meta.env.DEV) {
 }
 
 app.mount("#app");
+
+// 关掉 WebView 自带的右键菜单（刷新 / 另存为 / 打印 / 检查元素那一套）。
+// WebView2 的这份菜单是浏览器的默认菜单，和启动器功能无关，误点刷新还会把
+// 正在跑的界面状态清掉，所以整窗一律拦掉；输入框放行，否则右键粘贴就没了。
+document.addEventListener("contextmenu", (e) => {
+  const el = e.target as HTMLElement | null;
+  const editable = el?.closest("input, textarea, [contenteditable='true']");
+  if (editable) return;
+  e.preventDefault();
+});
+
+// 顺带拦掉浏览器级的快捷键刷新 / 打印 / 保存，避免 F5、Ctrl+R 把前端重载。
+window.addEventListener("keydown", (e) => {
+  const key = e.key.toLowerCase();
+  const browserKey =
+    e.key === "F5" ||
+    e.key === "F7" ||
+    (e.ctrlKey && (key === "r" || key === "p" || key === "s" || key === "u")) ||
+    (e.ctrlKey && e.shiftKey && (key === "i" || key === "j" || key === "c"));
+  if (browserKey) e.preventDefault();
+});

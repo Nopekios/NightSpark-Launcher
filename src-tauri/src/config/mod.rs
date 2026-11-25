@@ -8,6 +8,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// 静默跑子进程：启动器是 GUI 程序，探测 Java 之类的调用不加这个标志，
+/// Windows 会给每个子进程弹一个黑色 CMD 窗口（设置页一次探测好几个 Java，就会连弹几个）。
+fn quiet(cmd: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LauncherConfig {
     /// Java 可执行文件路径，None 表示由启动器自动探测
@@ -420,7 +434,9 @@ pub fn major_from_version(version: &str) -> Option<u32> {
 ///
 /// 解析不出来返回 None，调用方按「不拦」处理。
 pub fn probe_major(path: &str) -> Option<u32> {
-    let output = Command::new(path).arg("-version").output().ok()?;
+    let mut cmd = Command::new(path);
+    cmd.arg("-version");
+    let output = quiet(&mut cmd).output().ok()?;
     let mut text = String::from_utf8_lossy(&output.stderr).to_string();
     text.push_str(&String::from_utf8_lossy(&output.stdout));
     major_from_version(&parse_java_version(&text)?)
@@ -455,7 +471,9 @@ pub fn detect_java() -> Result<Vec<JavaInfo>, AppError> {
             continue;
         }
 
-        let output = match Command::new(&candidate).arg("-version").output() {
+        let mut cmd = Command::new(&candidate);
+        cmd.arg("-version");
+        let output = match quiet(&mut cmd).output() {
             Ok(output) => output,
             Err(_) => continue,
         };
